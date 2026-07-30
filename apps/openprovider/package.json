@@ -8,10 +8,16 @@
 		"build:sdk": "bun run --cwd ../.. build:sdk",
 		"hello": "bun run src/hello.ts",
 		"probe": "bun run src/probe-context-hook.ts",
+		"probe:engine": "bun run src/probe-context-engine.ts",
+		"probe:agent": "bun run src/probe-context-agent.ts",
+		"probe:free-tier": "bun run src/probe-free-tier.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@cline/sdk": "workspace:*"
+		"@cline/agents": "workspace:*",
+		"@cline/sdk": "workspace:*",
+		"@vscode/tree-sitter-wasm": "^0.3.1",
+		"web-tree-sitter": "^0.26.11"
 	},
 	"devDependencies": {
 		"typescript": "^5.9.3"
