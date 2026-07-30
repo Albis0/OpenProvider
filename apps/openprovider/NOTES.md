@@ -183,19 +183,32 @@ açıkça sınırla.**
 ## 7. Dikkat edilecek API tuzağı
 
 **Sağlayıcı hataları exception fırlatmıyor.** `agent.run()` hata durumunda da
-başarıyla dönüyor; `result.text` `undefined`, `usage` sıfır oluyor. Hatayı
-görmek için event'e abone olmak şart:
+normal dönüyor, `try/catch` hiçbir şey yakalamıyor.
+
+> **Düzeltme (Faz 3'te bulundu):** Bu bölümün ilk hali "hatayı görmek için
+> event'e abone olmak şart" diyordu. Yanlıştı. Hata dönüş değerinde de var:
 
 ```ts
-agent.subscribe((event) => {
-  if (event.type === "run-failed") {
-    console.error(event.snapshot?.lastError)
-  }
-})
+const result = await agent.run(prompt)
+if (result.status === "failed") {
+  console.error(result.error?.message)   // örn. "Invalid API Key"
+}
 ```
 
-Faz 3'ün (build/test doğrulama + retry) bunun üzerine kurulması gerekecek —
-`try/catch` yetmez.
+Ampirik olarak doğrulandı: geçersiz key'le `status: "failed"`,
+`error: Error("Invalid API Key")`, `outputText: ""` dönüyor.
+
+Alan adlarına dikkat — `AgentRunResult`'ta `text` ve `finishReason` **yok**:
+
+| Beklenen | Gerçek |
+|---|---|
+| `result.text` | `result.outputText` |
+| `result.finishReason` | `result.status` |
+
+Yanlış alan adı `undefined` veriyor, hata vermiyor — sessizce yanlış davranış.
+
+Event'e abone olmak hâlâ yararlı, ama **streaming** için (`assistant-text-delta`),
+hata yakalamak için değil.
 
 ---
 
