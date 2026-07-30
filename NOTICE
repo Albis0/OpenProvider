@@ -1,0 +1,18 @@
+OpenProvider
+
+This software is derived from Cline (https://github.com/cline/cline),
+Copyright (c) Cline Bot Inc., licensed under the Apache License, Version 2.0.
+
+This software has been modified from the original. Notable changes include:
+- Rebranding from "Cline" to "OpenProvider" (extension identity, commands,
+  views, icons, and user-facing text).
+- Removal of the Cline-hosted account, authentication, and billing system
+  (ClineAccount, ClinePass, credit balance, and related UI), which depended
+  on Cline's own backend services.
+- Removal of telemetry and error reporting integrations that sent data to
+  Cline's infrastructure.
+- Focus on free-tier API providers (NVIDIA Build, Groq, Cerebras, Gemini,
+  OpenRouter).
+
+See the LICENSE file for the full text of the Apache License, Version 2.0
+that governs both the original work and this derivative.

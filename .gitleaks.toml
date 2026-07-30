@@ -1,0 +1,25 @@
+title = "OpenProvider secret scanning"
+
+[extend]
+useDefault = true
+
+# Test fixtures, documentation placeholders and protocol constants that the
+# default rules flag as secrets. Each was inspected by hand: none is a real
+# credential.
+#
+# Keep this list tight. Anything listed here stops being scanned, so only add a
+# path after confirming the match yourself.
+[allowlist]
+description = "Known non-secrets: test fixtures and doc placeholders"
+paths = [
+  # JWTs signed with "alg": "none" for a fake test@cline.bot user, used by CLI tests.
+  '''apps/cli/src/tests/configs/.*/data/settings/providers\.json''',
+  # The flagged `actModeApiModelId` values are model names, not keys.
+  '''apps/vscode/src/sdk/cline-session-factory\.test\.ts''',
+  '''sdk/packages/core/src/services/storage/provider-settings-legacy-migration\.test\.ts''',
+  # The fixed Sec-WebSocket-Key from the RFC 6455 handshake example.
+  '''sdk/packages/core/src/hub/server/index\.test\.ts''',
+  # Upstream Cline API docs; the tokens are literal "YOUR_API_KEY" placeholders.
+  '''docs/api/.*\.mdx''',
+  '''docs/enterprise-solutions/api-reference\.mdx''',
+]
