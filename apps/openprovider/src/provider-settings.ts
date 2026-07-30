@@ -86,3 +86,49 @@ export function resolveProvider(): ResolvedProvider {
 export function describe(resolved: ResolvedProvider): string {
 	return `${resolved.providerId} / ${resolved.modelId} (key: ${resolved.apiKey.length} chars from ${resolved.source})`;
 }
+
+export interface ProviderCredentials {
+	providerId: string;
+	apiKey: string;
+	/** The model stored for this provider, when one was chosen. */
+	model?: string;
+}
+
+/**
+ * What the router needs from credential storage. Narrow on purpose: the
+ * router can be exercised against a stub without touching the real settings
+ * file or needing keys present.
+ */
+export interface CredentialSource {
+	/** Providers that have a usable key right now. */
+	listAvailable(): string[];
+	get(providerId: string): ProviderCredentials | undefined;
+}
+
+/** Credential source backed by the SDK's provider store. Read-only. */
+export function createCredentialSource(): CredentialSource {
+	const manager = new ProviderSettingsManager();
+
+	return {
+		listAvailable(): string[] {
+			const state = manager.read();
+			const providers = state.providers ?? {};
+			return Object.keys(providers).filter((id) => {
+				const settings = manager.getProviderSettings(id);
+				return Boolean(readStringField(settings, "apiKey"));
+			});
+		},
+		get(providerId: string): ProviderCredentials | undefined {
+			const settings = manager.getProviderSettings(providerId);
+			const apiKey = readStringField(settings, "apiKey");
+			if (!apiKey) {
+				return undefined;
+			}
+			return {
+				providerId,
+				apiKey,
+				model: readStringField(settings, "model"),
+			};
+		},
+	};
+}

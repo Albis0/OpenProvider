@@ -1,0 +1,23 @@
+{
+	"defaultMode": "code",
+	"modes": {
+		"plan": {
+			"provider": "gemini"
+		},
+		"code": {
+			"provider": "groq"
+		},
+		"docs": {
+			"provider": "groq"
+		},
+		"review": {
+			"provider": "gemini"
+		}
+	},
+	"fallback": [
+		"gemini",
+		"groq"
+	],
+	"disabled": [],
+	"maxOutputTokens": 4096
+}
