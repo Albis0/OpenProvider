@@ -1,0 +1,22 @@
+{
+	"name": "@openprovider/engine",
+	"version": "0.0.1",
+	"private": true,
+	"description": "OpenProvider — automatic, static-analysis context selection on top of the Cline SDK",
+	"type": "module",
+	"scripts": {
+		"build:sdk": "bun run --cwd ../.. build:sdk",
+		"hello": "bun run src/hello.ts",
+		"probe": "bun run src/probe-context-hook.ts",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@cline/sdk": "workspace:*"
+	},
+	"devDependencies": {
+		"typescript": "^5.9.3"
+	},
+	"engines": {
+		"node": ">=22"
+	}
+}
