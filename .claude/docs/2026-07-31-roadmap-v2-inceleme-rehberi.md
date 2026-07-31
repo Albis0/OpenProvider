@@ -118,7 +118,7 @@ OPENPROVIDER_PROVIDER=groq bun run src/probe-verify.ts            # 7/7
 Gerçek kullanım denemek istersen:
 
 ```bash
-bun run src/probe-engine.ts "C:/başka/projen" --prompt "aradığın şey"
+bun run src/probe-context-engine.ts "C:/başka/projen" --prompt "aradığın şey"
 ```
 
 ---
