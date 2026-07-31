@@ -37,12 +37,19 @@ import {
 	UsageStore,
 } from "./quota";
 import {
+	classifyError,
+	describeSwitch,
 	loadConfig,
 	type Mode,
+	resolveDecider,
+	resolveWaitMs,
 	type RouteDecision,
 	Router,
 	type RoutingConfig,
 	suggestConfig,
+	type SwitchDecider,
+	type SwitchPolicy,
+	type SwitchRequest,
 } from "./routing";
 import { runVerifiedTask, verify, type VerificationReport } from "./verify";
 
@@ -134,6 +141,20 @@ export interface SessionOptions {
 	observeRateLimitHeaders?: boolean;
 	/** Overrides where usage is persisted. Used by tests. */
 	usageDir?: string;
+	/**
+	 * What to do when a provider fails mid-run. Defaults to `"ask"`, which
+	 * calls `onProviderSwitch`; with no callback it degrades to `"auto"`,
+	 * since stalling on a question nobody can answer is worse than choosing.
+	 */
+	switchPolicy?: SwitchPolicy;
+	/** Consulted before switching providers, when the policy is `"ask"`. */
+	onProviderSwitch?: SwitchDecider;
+	/** Injectable delay, so tests do not actually wait. */
+	sleep?: (ms: number) => Promise<void>;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export interface SessionRunOptions {
@@ -318,50 +339,106 @@ export class OpenProviderSession {
 		const providersUsed: string[] = [];
 		let lastRoute: RouteDecision | undefined;
 
-		// Routing happens per attempt, not once. If the first provider fails,
-		// it is knocked out and the retry is routed somewhere else.
+		const decider = resolveDecider(
+			this.options.switchPolicy ?? "ask",
+			this.options.onProviderSwitch,
+		);
+		const sleep = this.options.sleep ?? defaultSleep;
+
+		// Routing happens per attempt, not once, and a failure raises a decision
+		// rather than silently moving on: the user chose a model for a reason.
 		const runAttempt = async (
 			attemptPrompt: string,
 		): Promise<AgentRunOutcome> => {
-			const route = this.router.route(prompt, runOptions.mode);
-			lastRoute = route;
-			providersUsed.push(route.providerId);
-			for (const notice of route.notices) {
-				if (!notices.includes(notice)) {
-					notices.push(notice);
+			let waitsUsed = 0;
+			// Bounded by the number of providers, so a chain of failures cannot
+			// cycle forever.
+			let switchesLeft = Math.max(1, this.config.fallback.length + 1);
+
+			for (;;) {
+				const route = this.router.route(prompt, runOptions.mode);
+				lastRoute = route;
+				providersUsed.push(route.providerId);
+				for (const notice of route.notices) {
+					if (!notices.includes(notice)) {
+						notices.push(notice);
+					}
+				}
+				this.options.onEvent?.(
+					`routing: mode "${route.mode}" -> ${route.providerId}${
+						route.modelId ? ` / ${route.modelId}` : ""
+					}`,
+				);
+
+				const agent = this.agentFactory({
+					providerId: route.providerId,
+					modelId: route.modelId,
+					apiKey: route.apiKey,
+					beforeModel: this.buildHook(route, runOptions, selected),
+					tools: this.options.tools,
+					maxIterations: this.options.maxIterations ?? 6,
+				});
+
+				const outcome = await agent.run(attemptPrompt);
+				// Recorded even on failure: a rejected request can still consume
+				// quota, and a provider that fails repeatedly is worth seeing.
+				await this.tracker?.record(
+					route.providerId,
+					outcome.usage,
+					!outcome.error,
+				);
+
+				if (!outcome.error) {
+					return outcome;
+				}
+
+				const info = classifyError(outcome.error);
+				const request: SwitchRequest = {
+					from: route.providerId,
+					to: this.router.peekAlternative(route.mode, route.providerId),
+					reason: info.summary,
+					isRateLimit: info.isRateLimit,
+					retryAfterMs: info.retryAfterMs,
+					quota: await this.tracker?.snapshot(route.providerId),
+					timesAsked: waitsUsed,
+				};
+
+				const decision = await decider(request);
+				this.options.onEvent?.(
+					`${describeSwitch(request)}\n  decision: ${decision}`,
+				);
+				notices.push(`${request.from}: ${info.summary} → ${decision}`);
+
+				if (decision === "abort") {
+					return outcome;
+				}
+
+				if (decision === "wait") {
+					const waitMs = resolveWaitMs(request);
+					if (waitMs !== undefined && waitsUsed === 0) {
+						waitsUsed += 1;
+						this.options.onEvent?.(
+							`waiting ${Math.ceil(waitMs / 1000)}s for ${route.providerId}`,
+						);
+						await sleep(waitMs);
+						continue;
+					}
+					// Nothing to wait for, or we already waited once. Waiting again
+					// on an unstated delay is just stalling, so treat it as a switch.
+					this.options.onEvent?.(
+						"cannot wait again — switching instead",
+					);
+				}
+
+				this.router.markUnavailable(
+					route.providerId,
+					outcome.error.slice(0, 80),
+				);
+				switchesLeft -= 1;
+				if (switchesLeft <= 0 || !request.to) {
+					return outcome;
 				}
 			}
-			this.options.onEvent?.(
-				`routing: mode "${route.mode}" -> ${route.providerId}${
-					route.modelId ? ` / ${route.modelId}` : ""
-				}`,
-			);
-
-			const agent = this.agentFactory({
-				providerId: route.providerId,
-				modelId: route.modelId,
-				apiKey: route.apiKey,
-				beforeModel: this.buildHook(route, runOptions, selected),
-				tools: this.options.tools,
-				maxIterations: this.options.maxIterations ?? 6,
-			});
-
-			const outcome = await agent.run(attemptPrompt);
-			// Recorded even on failure: a rejected request can still consume
-			// quota, and a provider that fails repeatedly is worth seeing.
-			await this.tracker?.record(
-				route.providerId,
-				outcome.usage,
-				!outcome.error,
-			);
-			if (outcome.error) {
-				// Feed the failure back so the next attempt avoids this provider.
-				this.router.markUnavailable(route.providerId, outcome.error.slice(0, 80));
-				this.options.onEvent?.(
-					`routing: ${route.providerId} knocked out — ${outcome.error.split("\n")[0]}`,
-				);
-			}
-			return outcome;
 		};
 
 		if (!shouldVerify) {

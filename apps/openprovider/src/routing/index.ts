@@ -33,3 +33,21 @@ export {
 	type RouteDecision,
 	Router,
 } from "./router";
+export {
+	classifyError,
+	isRateLimitError,
+	parseRetryDelay,
+	type RateLimitInfo,
+} from "./rate-limit";
+export {
+	autoDecide,
+	describeSwitch,
+	MAX_WAIT_MS,
+	resolveDecider,
+	resolveWaitMs,
+	stopDecide,
+	type SwitchDecider,
+	type SwitchDecision,
+	type SwitchPolicy,
+	type SwitchRequest,
+} from "./switch-policy";

@@ -159,6 +159,17 @@ export class Router {
 		throw new NoProviderAvailableError(notices);
 	}
 
+	/**
+	 * Where a mode would go if `excluding` were unavailable, without changing
+	 * anything. Needed to ask "switch to X?" before deciding to.
+	 */
+	peekAlternative(mode: Mode, excluding: string): string | undefined {
+		return this.candidatesFor(mode).find(
+			(providerId) =>
+				providerId !== excluding && this.skipReason(providerId) === undefined,
+		);
+	}
+
 	/** Everything the router currently considers usable. For diagnostics. */
 	availableProviders(): string[] {
 		return this.credentials

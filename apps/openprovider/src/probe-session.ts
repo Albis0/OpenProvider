@@ -230,9 +230,13 @@ async function testFailureReroute(): Promise<void> {
 			result.notices.some((notice) => notice.includes("failed earlier")),
 			JSON.stringify(result.notices.at(-1) ?? ""),
 		);
+		// Since Faz 7 the switch happens inside the attempt, so a provider
+		// failure no longer spends one of the two verification attempts. That
+		// matters: the single retry is meant for "the code is wrong", not for
+		// "the provider was down".
 		record(
-			"verification passed after the reroute",
-			result.ok && result.attempts === 2,
+			"verification passed without spending the retry on the outage",
+			result.ok && result.attempts === 1,
 			`ok=${result.ok}, attempts=${result.attempts}`,
 		);
 	} finally {

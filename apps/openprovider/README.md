@@ -8,7 +8,24 @@ Roadmap'in dört fazı da burada, üç bağımsız parça hâlinde.
 
 ---
 
-## Üç parça
+## Tek giriş noktası
+
+```ts
+const session = await OpenProviderSession.create({ projectDir })
+const result = await session.run("scanner.ts'deki hatayı düzelt")
+console.log(result.summary)
+```
+
+Bu tek çağrı: moda göre sağlayıcı seçer, alakalı dosyaları bulup enjekte eder,
+ajanı çalıştırır, projenin build/test'ini koşar, hata varsa bir kez düzelttirir
+ve tek bir özet döndürür. Sağlayıcı patlarsa sorar (`onProviderSwitch`),
+kotayı takip eder (`session.quota()`).
+
+Aşağıdaki parçalar ayrı ayrı da kullanılabilir.
+
+---
+
+## Parçalar
 
 ### `src/context/` — otomatik dosya seçimi (Faz 1)
 
@@ -73,6 +90,10 @@ bun run --cwd ../.. build:sdk    # SDK dist/ üzerinden çözülüyor, şart
 | `bun run probe:agent` | Uçtan uca: ajan `@file` olmadan doğru dosyaları buluyor mu |
 | `bun run src/probe-routing.ts` | Mod tespiti, yönlendirme, fallback |
 | `bun run src/probe-verify.ts` | Bozuk repo senaryosu: yakala, düzelt, raporla |
+| `bun run src/probe-session.ts` | Birleşik oturum: routing + context + verify tek çağrıda |
+| `bun run src/probe-provider-compat.ts` | Sağlayıcı tuhaflıkları, Groq'un araç döngüsü |
+| `bun run src/probe-quota.ts` | Kota takibi ve rate limit başlıkları |
+| `bun run src/probe-switch.ts` | Rate limit'te sorarak geçiş (bekle / geç / dur) |
 | `bun run probe:free-tier` | Groq'un "Request too large" hatası ve çözümü |
 | `bun run typecheck` | `tsc --noEmit` |
 
@@ -103,9 +124,14 @@ Faz raporları: [`.claude/docs/`](../../.claude/docs/).
   java), genişletmek küçük iş.
 - `tsconfig` path alias'ları (`@/utils`) graf'ta kenar oluşturmuyor.
 - Türkçe prompt ↔ İngilizce kod: "kota göstergesi" yazınca `quota` eşleşmiyor.
-- **Groq + `gpt-oss-120b` araç kullanan döngülerde çalışmıyor** — model
-  `reasoning_content` üretiyor, Groq geri gönderilince kendi alanını
-  reddediyor. Tek turluk sohbette sorun yok.
-- **Gemini ücretsiz katman günde 20 istek.** Tek sağlayıcı bir oturuma yetmiyor.
-- Üç parça henüz **tek akışta birleştirilmedi**; roadmap faz içinde bonus
-  özellik yasakladığı için bilinçli olarak ertelendi.
+- **Gemini ücretsiz katman günde 20 istek.** Tek sağlayıcı bir oturuma yetmiyor
+  — `session.quota()` ve fallback zinciri tam da bunun için.
+- **Reasoning geçmişten siliniyor** (Groq kabul etmediği için), yani model kendi
+  düşünce zincirini hatırlamıyor. Uzun görevlerde kaliteyi etkileyebilir,
+  ölçülmedi.
+- **Kota başlıklarını okumak global `fetch`'i sarmalıyor.** Varsayılan kapalı
+  (`observeRateLimitHeaders`), `dispose()` ile geri alınıyor.
+- **Sağlayıcı limitleri 2026-07-31 tarihli ölçümler.** Değişebilir.
+
+> Groq + `gpt-oss-120b`'nin araç döngülerinde çalışmama sorunu **çözüldü**
+> (Faz 5) — `reasoning` parçaları giden istekten ayıklanıyor.
