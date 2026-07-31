@@ -1,33 +1,28 @@
 /**
  * Faz 1, adım 5 — SDK entegrasyonu.
  *
- * Turns a `ContextEngine` into the `beforeModel` hook proven out in Faz 0.
- * On every model call the latest user message is read, relevant files are
- * selected, and a repo map is inserted ahead of the conversation.
+ * Turns a `ContextEngine` into something that runs before each model call:
+ * read the latest user message, select relevant files, and insert a repo map
+ * ahead of the conversation.
  *
  * Two properties this relies on, both verified in Faz 0:
- *   - messages returned from the hook apply to that request only and are never
- *     persisted, so stale context cannot accumulate in the transcript;
- *   - `options` returned from the hook do reach the gateway, which is the only
- *     way to cap output tokens on the plain `Agent`.
+ *   - messages returned from `beforeModel` apply to that request only and are
+ *     never persisted, so stale context cannot accumulate in the transcript;
+ *   - `options` returned from it do reach the gateway, which is the only way
+ *     to cap output tokens on the plain `Agent`.
  *
  * The user's own `@file` mentions are untouched. This adds a suggestion; it
  * never removes what they asked for.
  */
-import type {
-	AgentBeforeModelResult,
-	AgentMessage,
-	AgentRuntimeHooks,
-} from "@cline/agents";
+import type { AgentMessage } from "@cline/agents";
+import {
+	type BeforeModelHook,
+	composeBeforeModel,
+	createOutputCapTransform,
+	type RequestTransform,
+} from "../hooks/pipeline";
 import type { ContextEngine, RenderOptions } from "./engine";
 import type { ScoredFile, ScoreOptions } from "./score";
-
-/**
- * `@cline/sdk` re-exports the `Agent` class but not the hook types, so those
- * come from `@cline/agents` directly. Both are the same workspace packages the
- * extension builds against.
- */
-type BeforeModelHook = NonNullable<AgentRuntimeHooks["beforeModel"]>;
 
 export interface ContextHookOptions extends ScoreOptions, RenderOptions {
 	/**
@@ -71,35 +66,48 @@ function makeContextMessage(text: string): AgentMessage {
 }
 
 /**
- * Builds the hook. Assign the result to `hooks.beforeModel` when constructing
- * an `Agent`, or to `hooks` on a `ClineCore` session config.
+ * The context engine as a pipeline transform.
+ *
+ * Prefer this over `createContextHook` when anything else also needs to touch
+ * the request — a sanitizer, a usage counter — since only one `beforeModel`
+ * slot exists per agent.
+ */
+export function createContextTransform(
+	engine: ContextEngine,
+	options: ContextHookOptions = {},
+): RequestTransform {
+	return {
+		name: "context",
+		async apply({ request }) {
+			const prompt = lastUserPrompt(request.messages);
+			if (!prompt) {
+				return undefined;
+			}
+
+			const { text, selected } = await engine.buildContext(prompt, options);
+			options.onSelect?.(selected, prompt);
+			if (!text) {
+				return undefined;
+			}
+
+			return {
+				messages: [makeContextMessage(text), ...request.messages],
+			};
+		},
+	};
+}
+
+/**
+ * Convenience wrapper for the common case: context injection plus an output
+ * cap, and nothing else.
  */
 export function createContextHook(
 	engine: ContextEngine,
 	options: ContextHookOptions = {},
 ): BeforeModelHook {
-	return async ({ request }): Promise<AgentBeforeModelResult | undefined> => {
-		const modelOptions =
-			options.maxOutputTokens === undefined
-				? undefined
-				: { maxTokens: options.maxOutputTokens };
-		const optionsOnly = modelOptions ? { options: modelOptions } : undefined;
-
-		const prompt = lastUserPrompt(request.messages);
-		if (!prompt) {
-			return optionsOnly;
-		}
-
-		const { text, selected } = await engine.buildContext(prompt, options);
-		options.onSelect?.(selected, prompt);
-
-		if (!text) {
-			return optionsOnly;
-		}
-
-		return {
-			messages: [makeContextMessage(text), ...request.messages],
-			...(modelOptions ? { options: modelOptions } : {}),
-		};
-	};
+	const transforms: RequestTransform[] = [createContextTransform(engine, options)];
+	if (options.maxOutputTokens !== undefined) {
+		transforms.push(createOutputCapTransform(options.maxOutputTokens));
+	}
+	return composeBeforeModel(transforms);
 }
