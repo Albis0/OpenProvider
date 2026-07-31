@@ -41,6 +41,7 @@ const KNOWN_API_PROVIDERS = {
 	cerebras: true,
 	sapaicore: true,
 	groq: true,
+	nvidia: true,
 	poolside: true,
 	huggingface: true,
 	"huawei-cloud-maas": true,

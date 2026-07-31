@@ -61,6 +61,14 @@ export const ApiKeyField = ({
 		[localValue],
 	)
 
+	// Pasting a base URL into the key box is an easy mistake: the fields sit
+	// next to each other and neither validates. It fails quietly, too — a
+	// provider's /models endpoint often needs no auth, so the model list still
+	// populates and everything looks configured until the first real request
+	// returns 401. Warn, but never block: a key legitimately starting with
+	// "http" is unlikely, not impossible.
+	const looksLikeUrl = /^https?:\/\//i.test(localValue.trim())
+
 	return (
 		<div>
 			<VSCodeTextField
@@ -81,6 +89,18 @@ export const ApiKeyField = ({
 				value={localValue}>
 				<span style={{ fontWeight: 500 }}>{label}</span>
 			</VSCodeTextField>
+			{looksLikeUrl && (
+				<p
+					role="alert"
+					style={{
+						fontSize: "12px",
+						marginTop: 3,
+						marginBottom: 0,
+						color: "var(--vscode-editorWarning-foreground)",
+					}}>
+					This looks like a URL, not an API key. Base URLs belong in the Base URL field.
+				</p>
+			)}
 			<p
 				style={{
 					fontSize: "12px",

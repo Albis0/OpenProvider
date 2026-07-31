@@ -104,6 +104,7 @@ message Secrets {
   optional string oca_refresh_token = 42;
   optional string mcp_o_auth_secrets = 43;
   optional string cline_api_key = 44;
+  optional string nvidia_api_key = 45;
   optional string openai_codex_oauth_credentials = 48;
   optional string wandb_api_key = 50;
 }
@@ -254,9 +255,13 @@ message Settings {
   optional string default_terminal_profile = 137;
   optional bool yolo_mode_toggled = 142;
   optional bool use_auto_condense = 143;
+  optional string act_mode_nvidia_model_id = 144;
   optional string preferred_language = 145;
+  optional OpenRouterModelInfo act_mode_nvidia_model_info = 146;
   optional PlanActMode mode = 147;
+  optional string plan_mode_nvidia_model_id = 148;
   optional FocusChainSettings focus_chain_settings = 149;
+  optional OpenRouterModelInfo plan_mode_nvidia_model_info = 151;
   optional bool hooks_enabled = 152;
   optional bool subagents_enabled = 153;
   optional bool background_edit_enabled = 155;

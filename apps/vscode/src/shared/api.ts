@@ -33,6 +33,7 @@ export type ApiProvider =
 	| "cerebras"
 	| "sapaicore"
 	| "groq"
+	| "nvidia"
 	| "poolside"
 	| "huggingface"
 	| "huawei-cloud-maas"

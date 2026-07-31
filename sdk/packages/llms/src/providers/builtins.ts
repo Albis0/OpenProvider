@@ -882,6 +882,17 @@ const OPENAI_COMPATIBLE_SPEC_OVERRIDES: BuiltinSpecOverride[] = [
 		modelsSourceUrl: "http://localhost:11434/api/tags",
 	},
 	{
+		// Everything else about Nvidia comes from the generated models.dev spec;
+		// this override exists only to add the models endpoint.
+		//
+		// models.dev carries no model list for Nvidia, so the picker would be
+		// empty and every model id would have to be typed by hand. Nvidia does
+		// publish an OpenAI-shaped /v1/models (102 entries, and it needs no
+		// auth), which is exactly what `fetchModelIdsFromSource` consumes.
+		id: "nvidia",
+		modelsSourceUrl: "https://integrate.api.nvidia.com/v1/models",
+	},
+	{
 		id: "lmstudio",
 		name: "LM Studio",
 		description: "Local model inference with LM Studio",

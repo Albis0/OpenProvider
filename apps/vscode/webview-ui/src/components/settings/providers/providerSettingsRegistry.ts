@@ -55,6 +55,9 @@ const GENERIC_PROVIDER_PRESENTATION_OVERRIDES: Record<string, GenericProviderPre
 	cerebras: {
 		signupUrl: "https://cloud.cerebras.ai/",
 	},
+	nvidia: {
+		signupUrl: "https://build.nvidia.com/",
+	},
 	gemini: {
 		signupUrl: "https://aistudio.google.com/apikey",
 	},
@@ -155,6 +158,7 @@ const FALLBACK_GENERIC_PROVIDER_NAMES = {
 	minimax: "MiniMax",
 	mistral: "Mistral",
 	nousResearch: "NousResearch",
+	nvidia: "NVIDIA Build",
 	poolside: "Poolside",
 	together: "Together",
 	v0: "Vercel v0",
