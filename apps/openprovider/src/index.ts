@@ -30,6 +30,7 @@ export {
 	type ResolvedProvider,
 	resolveProvider,
 } from "./provider-settings";
+export * from "./providers";
 export * from "./routing";
 export {
 	type AgentFactory,

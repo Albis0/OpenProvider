@@ -28,6 +28,7 @@ import {
 	type RequestTransform,
 } from "./hooks/pipeline";
 import { type CredentialSource, createCredentialSource } from "./provider-settings";
+import { createSanitizerTransform, resolveOutputCap } from "./providers";
 import {
 	loadConfig,
 	type Mode,
@@ -53,7 +54,10 @@ export interface AgentFactoryInput {
 	modelId?: string;
 	apiKey: string;
 	beforeModel: BeforeModelHook;
-	tools?: readonly AgentTool[];
+	// biome-ignore lint/suspicious/noExplicitAny: tool input/output types vary
+	// per tool, so a concrete AgentTool<X, Y> is not assignable to
+	// AgentTool<unknown, unknown>. The SDK's own AgentRuntimeConfig does this.
+	tools?: readonly AgentTool<any, any>[];
 	maxIterations: number;
 }
 
@@ -96,7 +100,10 @@ export interface SessionOptions {
 	/** Repository to index for context. Defaults to `projectDir`. */
 	contextRoot?: string;
 	/** Tools handed to the agent. Without these it can only talk. */
-	tools?: readonly AgentTool[];
+	// biome-ignore lint/suspicious/noExplicitAny: tool input/output types vary
+	// per tool, so a concrete AgentTool<X, Y> is not assignable to
+	// AgentTool<unknown, unknown>. The SDK's own AgentRuntimeConfig does this.
+	tools?: readonly AgentTool<any, any>[];
 	maxIterations?: number;
 	credentials?: CredentialSource;
 	agentFactory?: AgentFactory;
@@ -210,8 +217,21 @@ export class OpenProviderSession {
 			);
 		}
 
-		if (route.maxOutputTokens !== undefined) {
-			transforms.push(createOutputCapTransform(route.maxOutputTokens));
+		// The measured per-provider default fills in when config says nothing;
+		// leaving it unset is only safe on providers that do not bill reserved
+		// output against the input quota.
+		const cap = resolveOutputCap(route.providerId, route.maxOutputTokens);
+		if (cap !== undefined) {
+			transforms.push(createOutputCapTransform(cap));
+		}
+
+		// Last, so it cleans the final message list rather than a prefix of it.
+		const sanitizer = createSanitizerTransform({
+			providerId: route.providerId,
+			onSanitize: (summary) => this.options.onEvent?.(`sanitize: ${summary}`),
+		});
+		if (sanitizer) {
+			transforms.push(sanitizer);
 		}
 
 		return composeBeforeModel(transforms, {

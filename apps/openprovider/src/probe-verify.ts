@@ -17,6 +17,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Agent, createTool } from "@cline/sdk";
+import { composeBeforeModel, createOutputCapTransform } from "./hooks/pipeline";
+import { createSanitizerTransform, resolveOutputCap } from "./providers";
 import { describe, MissingProviderError, resolveProvider } from "./provider-settings";
 import { runVerifiedTask, verify } from "./verify";
 
@@ -232,13 +234,28 @@ async function testWithAgent(): Promise<void> {
 			projectDir: dir,
 			onEvent: (message) => console.log(`  · ${message}`),
 			run: async ({ prompt }) => {
+				// Faz 5: the output cap alone is not enough on every provider.
+				// Groq rejects the `reasoning_content` its own model produced once
+				// it comes back in history, which only bites from the second
+				// request — exactly the shape a tool-using loop has. The sanitizer
+				// runs last so it cleans the final message list.
+				const transforms = [
+					createOutputCapTransform(resolveOutputCap(provider.providerId) ?? 4096),
+				];
+				const sanitizer = createSanitizerTransform({
+					providerId: provider.providerId,
+				});
+				if (sanitizer) {
+					transforms.push(sanitizer);
+				}
+
 				const agent = new Agent({
 					providerId: provider.providerId,
 					modelId: provider.modelId,
 					apiKey: provider.apiKey,
 					maxIterations: 6,
 					tools: [readFileTool, writeFileTool],
-					hooks: { beforeModel: () => ({ options: { maxTokens: 4096 } }) },
+					hooks: { beforeModel: composeBeforeModel(transforms) },
 				});
 				const run = await agent.run(prompt);
 				// `AgentRunResult` carries `status` and `error`, so a failed run is
