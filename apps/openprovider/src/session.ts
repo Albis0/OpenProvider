@@ -30,6 +30,13 @@ import {
 import { type CredentialSource, createCredentialSource } from "./provider-settings";
 import { createSanitizerTransform, resolveOutputCap } from "./providers";
 import {
+	observeRateLimits,
+	type QuotaSnapshot,
+	QuotaTracker,
+	type RateLimitObserver,
+	UsageStore,
+} from "./quota";
+import {
 	loadConfig,
 	type Mode,
 	type RouteDecision,
@@ -43,6 +50,8 @@ export interface AgentRunOutcome {
 	text: string;
 	/** Set when the provider or runtime failed. */
 	error?: string;
+	/** Real token counts from the provider, when the run reported them. */
+	usage?: { inputTokens?: number; outputTokens?: number };
 }
 
 export interface SessionAgent {
@@ -87,6 +96,10 @@ export const defaultAgentFactory: AgentFactory = (input) => {
 					result.status === "failed"
 						? (result.error?.message ?? "run failed")
 						: undefined,
+				usage: {
+					inputTokens: result.usage?.inputTokens,
+					outputTokens: result.usage?.outputTokens,
+				},
 			};
 		},
 	};
@@ -110,6 +123,17 @@ export interface SessionOptions {
 	onEvent?: (message: string) => void;
 	/** Skips repository indexing. Useful in tests and for non-code tasks. */
 	disableContext?: boolean;
+	/** Records token usage per provider. Default true. */
+	trackQuota?: boolean;
+	/**
+	 * Wraps the global `fetch` to read the provider's own `x-ratelimit-*`
+	 * headers, which are authoritative where local counting is only an
+	 * estimate. Off by default because it is a global patch — the `Agent` path
+	 * offers no per-call seam. Call `dispose()` to remove it.
+	 */
+	observeRateLimitHeaders?: boolean;
+	/** Overrides where usage is persisted. Used by tests. */
+	usageDir?: string;
 }
 
 export interface SessionRunOptions {
@@ -147,6 +171,8 @@ export class OpenProviderSession {
 		readonly config: RoutingConfig,
 		private readonly engine: ContextEngine | undefined,
 		private readonly agentFactory: AgentFactory,
+		private readonly tracker: QuotaTracker | undefined,
+		private readonly rateLimitObserver: RateLimitObserver | undefined,
 	) {}
 
 	static async create(
@@ -174,13 +200,55 @@ export class OpenProviderSession {
 			);
 		}
 
+		// The header observer patches global fetch, so it is opt-in and must be
+		// installed before any request goes out.
+		const observer = options.observeRateLimitHeaders
+			? observeRateLimits({
+					onSnapshot: (snapshot) =>
+						options.onEvent?.(
+							`quota: ${snapshot.providerId} reported ${snapshot.tokensRemaining ?? "?"} tokens remaining`,
+						),
+				})
+			: undefined;
+
+		const tracker =
+			options.trackQuota === false
+				? undefined
+				: new QuotaTracker({
+						store: new UsageStore({ dir: options.usageDir }),
+						observer,
+					});
+
 		return new OpenProviderSession(
 			options,
 			new Router(config, credentials),
 			config,
 			engine,
 			options.agentFactory ?? defaultAgentFactory,
+			tracker,
+			observer,
 		);
+	}
+
+	/**
+	 * Usage and remaining allowance per provider.
+	 *
+	 * Defaults to every provider with credentials, so a caller does not have to
+	 * know which ones exist.
+	 */
+	async quota(providerIds?: readonly string[]): Promise<QuotaSnapshot[]> {
+		if (!this.tracker) {
+			return [];
+		}
+		const ids =
+			providerIds ??
+			[...new Set([...this.config.fallback, ...Object.values(this.config.modes).map((target) => target.provider)])];
+		return this.tracker.snapshots(ids);
+	}
+
+	/** Removes the global fetch wrapper, if one was installed. */
+	dispose(): void {
+		this.rateLimitObserver?.uninstall();
 	}
 
 	/** Providers the router still considers usable. */
@@ -279,6 +347,13 @@ export class OpenProviderSession {
 			});
 
 			const outcome = await agent.run(attemptPrompt);
+			// Recorded even on failure: a rejected request can still consume
+			// quota, and a provider that fails repeatedly is worth seeing.
+			await this.tracker?.record(
+				route.providerId,
+				outcome.usage,
+				!outcome.error,
+			);
 			if (outcome.error) {
 				// Feed the failure back so the next attempt avoids this provider.
 				this.router.markUnavailable(route.providerId, outcome.error.slice(0, 80));

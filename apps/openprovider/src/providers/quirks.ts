@@ -48,10 +48,12 @@ const QUIRKS: Record<string, ProviderQuirks> = {
 		stripReasoning: true,
 		defaultMaxOutputTokens: 2048,
 		supportsTools: true,
-		limits: { tokensPerMinute: 8000 },
+		// Both confirmed against Groq's own x-ratelimit headers in Faz 6.
+		limits: { tokensPerMinute: 8000, requestsPerDay: 1000 },
 		note:
 			"Counts reserved output against TPM, so an uncapped request can be " +
-			"refused outright. Emits reasoning it will not accept back.",
+			"refused outright. Emits reasoning it will not accept back. " +
+			"Publishes x-ratelimit headers, so quota is exact rather than estimated.",
 		measuredOn: "2026-07-31",
 	},
 	gemini: {
