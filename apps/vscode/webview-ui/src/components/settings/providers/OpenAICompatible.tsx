@@ -20,6 +20,35 @@ import { useApiConfigurationHandlers } from "../utils/useApiConfigurationHandler
 import { useProviderApiKeyField } from "../utils/useProviderApiKeyField"
 
 /**
+ * A native `<select>` inherits none of the webview's theme, so on a dark theme
+ * it falls back to the browser default — white background, near-invisible
+ * text. VS Code exposes its own dropdown colours as CSS variables; applying
+ * them here is what every other picker in this settings screen does, just via
+ * styled-components rather than inline styles.
+ */
+const SELECT_STYLE: React.CSSProperties = {
+	width: "100%",
+	padding: "4px 6px",
+	backgroundColor: "var(--vscode-dropdown-background)",
+	color: "var(--vscode-dropdown-foreground)",
+	border: "1px solid var(--vscode-dropdown-border)",
+	borderRadius: 2,
+	// Without this the control renders in the OS UI font, not the editor's.
+	fontFamily: "inherit",
+	fontSize: "inherit",
+}
+
+/**
+ * The popup list is painted separately from the control, so the options need
+ * their own colours. `dropdown-listBackground` is the variable VS Code uses
+ * for it, falling back to the control's background on themes that omit it.
+ */
+const OPTION_STYLE: React.CSSProperties = {
+	backgroundColor: "var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background))",
+	color: "var(--vscode-dropdown-foreground)",
+}
+
+/**
  * Props for the OpenAICompatibleProvider component
  */
 interface OpenAICompatibleProviderProps {
@@ -341,17 +370,21 @@ export const OpenAICompatibleProvider = ({
 							setIsCustomOpenAiModelEntryVisible(false)
 							handleOpenAiModelSelection(modelId)
 						}}
-						style={{ width: "100%" }}
+						style={SELECT_STYLE}
 						value={selectedModelId && availableOpenAiModels.includes(selectedModelId) ? selectedModelId : ""}>
 						{selectedModelId && !availableOpenAiModels.includes(selectedModelId) && (
-							<option value="">{selectedModelId} (not in current list)</option>
+							<option style={OPTION_STYLE} value="">
+								{selectedModelId} (not in current list)
+							</option>
 						)}
 						{availableOpenAiModels.map((modelId) => (
-							<option key={modelId} value={modelId}>
+							<option key={modelId} style={OPTION_STYLE} value={modelId}>
 								{modelId}
 							</option>
 						))}
-						<option value="__custom__">Use custom model ID…</option>
+						<option style={OPTION_STYLE} value="__custom__">
+							Use custom model ID…
+						</option>
 					</select>
 
 					{(isCustomOpenAiModelEntryVisible ||
