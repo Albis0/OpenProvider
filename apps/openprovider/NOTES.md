@@ -1,4 +1,8 @@
-# Faz 0 — SDK Notları
+# SDK Notları
+
+> Faz 0'da yazıldı, Faz 5-7'de güncellendi. Her madde ya kodda satır
+> numarasıyla doğrulandı, ya da çalıştırılıp kanıtlandı. Tahmin yok.
+
 
 Roadmap'in Faz 0 sorusu tekti:
 
@@ -149,6 +153,34 @@ aracı için lazım olacak.
 
 ### Gemini — sorunsuz
 `gemini-3.5-flash` ile ilk denemede çalıştı. 12 giriş / 261 çıkış token.
+
+### Groq — araç kullanan döngülerde `reasoning_content` reddi (Faz 5'te çözüldü)
+
+```
+'messages.1' : for 'role:assistant' the following must be satisfied
+[('messages.1' : property 'reasoning_content' is unsupported)]
+```
+
+`gpt-oss-120b` bir `type: "reasoning"` içerik parçası üretiyor, SDK bunu
+geçmişte saklıyor, AI SDK bir sonraki istekte `reasoning_content` alanına
+çeviriyor, Groq **kendi modelinin ürettiği alanı** reddediyor.
+
+İlk istekte patlamıyor (geçmişte asistan mesajı yok), ikincide patlıyor. Yani
+tek turluk sohbet sorunsuz görünüyor, araç döngüsü çöküyor.
+
+**Çözüm:** `beforeModel`'de asistan mesajlarından `reasoning` parçalarını
+ayıklamak — `src/providers/sanitizer.ts`. Bundan sonra Groq araçlarla sorunsuz
+çalışıyor.
+
+### Groq — kota başlıklarını yayınlıyor (Faz 6)
+
+`x-ratelimit-limit-tokens`, `x-ratelimit-remaining-tokens`,
+`x-ratelimit-reset-tokens` dönüyor. Yani Groq için kota **tahmin değil, kesin**.
+
+Ölçülen limitler: **8000 token/dakika**, **1000 istek/gün**.
+
+Başlıkları okumak için global `fetch` sarmalamak gerekiyor: gateway özel bir
+`fetch` kabul ediyor ama düz `Agent` yolu onu asla geçirmiyor.
 
 ### Groq — "Request too long" hatasının gerçek sebebi
 Kullanıcının eklentide gördüğü hata burada da çıktı:
