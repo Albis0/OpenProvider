@@ -37,12 +37,22 @@ import {
 	UsageStore,
 } from "./quota";
 import {
+	type ChainPlan,
 	classifyError,
+	CORE_ROLE,
+	describeChain,
 	describeSwitch,
+	type Handoff,
 	loadConfig,
 	type Mode,
+	parseHandoff,
+	planChain,
+	renderHandoff,
+	renderReviewPrompt,
 	resolveDecider,
 	resolveWaitMs,
+	type Role,
+	ROLE_PROMPTS,
 	type RouteDecision,
 	Router,
 	type RoutingConfig,
@@ -164,6 +174,24 @@ export interface SessionRunOptions {
 	verify?: boolean;
 	/** Files to inject at most. Default 8. */
 	contextLimit?: number;
+	/**
+	 * Runs the full role chain even when the request looks like a single edit.
+	 * For a caller who knows the keyword table guessed wrong.
+	 */
+	forceChain?: boolean;
+}
+
+/** What one seat in the chain did. */
+export interface RoleRunRecord {
+	role: Role;
+	/** Provider that served the final attempt for this role. */
+	providerId: string;
+	modelId?: string;
+	/** Every provider this role tried, in order. Longer than 1 means failover. */
+	providersUsed: string[];
+	ok: boolean;
+	output: string;
+	error?: string;
 }
 
 export interface SessionRunResult {
@@ -183,6 +211,14 @@ export interface SessionRunResult {
 	retried: boolean;
 	verification?: VerificationReport;
 	summary: string;
+	/** Roles that ran, and why that set. Present even for a solo executor. */
+	chain?: ChainPlan;
+	/** One entry per role that ran, in order. */
+	roleRuns?: RoleRunRecord[];
+	/** The planner's parsed plan, when a planner ran. */
+	plan?: Handoff;
+	/** The reviewer's verdict, when a reviewer ran. */
+	review?: string;
 }
 
 export class OpenProviderSession {
@@ -347,8 +383,16 @@ export class OpenProviderSession {
 
 		// Routing happens per attempt, not once, and a failure raises a decision
 		// rather than silently moving on: the user chose a model for a reason.
+		//
+		// `role` makes the failover per-seat: the router is asked for that
+		// role's own candidate chain, so a planner that runs out of quota moves
+		// to the planner's next provider without disturbing where the executor
+		// will go. Roles frequently sit on different providers precisely so one
+		// exhausted quota does not stall the whole task.
 		const runAttempt = async (
 			attemptPrompt: string,
+			role?: Role,
+			roleProvidersUsed?: string[],
 		): Promise<AgentRunOutcome> => {
 			let waitsUsed = 0;
 			// Bounded by the number of providers, so a chain of failures cannot
@@ -356,18 +400,19 @@ export class OpenProviderSession {
 			let switchesLeft = Math.max(1, this.config.fallback.length + 1);
 
 			for (;;) {
-				const route = this.router.route(prompt, runOptions.mode);
+				const route = this.router.route(prompt, runOptions.mode, role);
 				lastRoute = route;
 				providersUsed.push(route.providerId);
+				roleProvidersUsed?.push(route.providerId);
 				for (const notice of route.notices) {
 					if (!notices.includes(notice)) {
 						notices.push(notice);
 					}
 				}
 				this.options.onEvent?.(
-					`routing: mode "${route.mode}" -> ${route.providerId}${
-						route.modelId ? ` / ${route.modelId}` : ""
-					}`,
+					`routing: ${role ? `${role} ` : ""}mode "${route.mode}" -> ${
+						route.providerId
+					}${route.modelId ? ` / ${route.modelId}` : ""}`,
 				);
 
 				const agent = this.agentFactory({
@@ -379,7 +424,13 @@ export class OpenProviderSession {
 					maxIterations: this.options.maxIterations ?? 6,
 				});
 
-				const outcome = await agent.run(attemptPrompt);
+				// The role instruction rides on the prompt rather than a system
+				// message: `AgentFactoryInput` has no `systemPrompt` seam, and
+				// adding one would change the factory contract for every existing
+				// caller to serve a feature that is off by default.
+				const outcome = await agent.run(
+					role ? `${ROLE_PROMPTS[role]}\n\n${attemptPrompt}` : attemptPrompt,
+				);
 				// Recorded even on failure: a rejected request can still consume
 				// quota, and a provider that fails repeatedly is worth seeing.
 				await this.tracker?.record(
@@ -395,7 +446,7 @@ export class OpenProviderSession {
 				const info = classifyError(outcome.error);
 				const request: SwitchRequest = {
 					from: route.providerId,
-					to: this.router.peekAlternative(route.mode, route.providerId),
+					to: this.router.peekAlternative(route.mode, route.providerId, role),
 					reason: info.summary,
 					isRateLimit: info.isRateLimit,
 					retryAfterMs: info.retryAfterMs,
@@ -441,8 +492,125 @@ export class OpenProviderSession {
 			}
 		};
 
+		const chain = planChain(prompt, this.config.roleConfig, {
+			force: runOptions.forceChain,
+		});
+		this.options.onEvent?.(describeChain(chain));
+
+		const roleRuns: RoleRunRecord[] = [];
+		let plan: Handoff | undefined;
+		let review: string | undefined;
+
+		/**
+		 * Runs the chain once and returns what the executor produced.
+		 *
+		 * The executor's output is what comes back, not the reviewer's: the
+		 * reviewer's job is to comment on work, and returning its commentary as
+		 * the task result would replace the actual answer with a critique of it.
+		 * The verdict is carried separately, in `review`.
+		 *
+		 * A failing planner or reviewer does not abort the task. Both are
+		 * advisory — losing the plan degrades the executor to the single-agent
+		 * behaviour that was the default until now, which is a worse turn but
+		 * still a real one. Only the executor failing is a failed task.
+		 */
+		const runChain = async (
+			attemptPrompt: string,
+		): Promise<AgentRunOutcome> => {
+			// A solo chain must stay byte-for-byte the old path: no role prompt,
+			// no role routing, so an unconfigured user sees no change at all.
+			if (chain.roles.length === 1) {
+				return runAttempt(attemptPrompt);
+			}
+
+			let executorPrompt = attemptPrompt;
+
+			if (chain.roles.includes("planner")) {
+				const used: string[] = [];
+				const outcome = await runAttempt(attemptPrompt, "planner", used);
+				const route = lastRoute as RouteDecision;
+				roleRuns.push({
+					role: "planner",
+					providerId: route.providerId,
+					modelId: route.modelId,
+					providersUsed: used,
+					ok: !outcome.error,
+					output: outcome.text,
+					error: outcome.error,
+				});
+
+				if (outcome.error) {
+					notices.push(
+						`planner failed (${outcome.error.split("\n")[0]}) — executing without a plan`,
+					);
+				} else {
+					plan = parseHandoff("planner", outcome.text);
+					if (!plan.structured) {
+						notices.push(
+							"planner did not return a numbered plan — passing its notes through as-is",
+						);
+					}
+					this.options.onEvent?.(
+						`planner: ${plan.steps.length} step(s)${
+							plan.structured ? "" : " (unstructured)"
+						}`,
+					);
+					executorPrompt = renderHandoff(plan, attemptPrompt);
+				}
+			}
+
+			const used: string[] = [];
+			const executorOutcome = await runAttempt(executorPrompt, CORE_ROLE, used);
+			const executorRoute = lastRoute as RouteDecision;
+			roleRuns.push({
+				role: CORE_ROLE,
+				providerId: executorRoute.providerId,
+				modelId: executorRoute.modelId,
+				providersUsed: used,
+				ok: !executorOutcome.error,
+				output: executorOutcome.text,
+				error: executorOutcome.error,
+			});
+
+			if (executorOutcome.error) {
+				return executorOutcome;
+			}
+
+			if (chain.roles.includes("reviewer")) {
+				const reviewUsed: string[] = [];
+				const reviewOutcome = await runAttempt(
+					renderReviewPrompt(attemptPrompt, executorOutcome.text, plan),
+					"reviewer",
+					reviewUsed,
+				);
+				const reviewRoute = lastRoute as RouteDecision;
+				roleRuns.push({
+					role: "reviewer",
+					providerId: reviewRoute.providerId,
+					modelId: reviewRoute.modelId,
+					providersUsed: reviewUsed,
+					ok: !reviewOutcome.error,
+					output: reviewOutcome.text,
+					error: reviewOutcome.error,
+				});
+
+				if (reviewOutcome.error) {
+					notices.push(
+						`reviewer failed (${reviewOutcome.error.split("\n")[0]}) — result not reviewed`,
+					);
+				} else {
+					review = reviewOutcome.text;
+				}
+			}
+
+			// The executor's own route is what the caller should see as "who
+			// served this turn", so it is restored after the reviewer moved it.
+			lastRoute = executorRoute;
+			return executorOutcome;
+		};
+
 		if (!shouldVerify) {
-			const outcome = await runAttempt(prompt);
+			const outcome = await runChain(prompt);
 			const route = lastRoute as RouteDecision;
 			return {
 				ok: !outcome.error,
@@ -456,6 +624,10 @@ export class OpenProviderSession {
 				outputs: [outcome.text],
 				attempts: 1,
 				retried: false,
+				chain,
+				roleRuns: roleRuns.length > 0 ? roleRuns : undefined,
+				plan,
+				review,
 				summary: outcome.error
 					? `Run failed on ${route.providerId}: ${outcome.error.split("\n")[0]}`
 					: "Run completed (verification skipped).",
@@ -466,7 +638,7 @@ export class OpenProviderSession {
 			prompt,
 			projectDir: this.options.projectDir,
 			onEvent: this.options.onEvent,
-			run: ({ prompt: attemptPrompt }) => runAttempt(attemptPrompt),
+			run: ({ prompt: attemptPrompt }) => runChain(attemptPrompt),
 		});
 
 		const route = lastRoute as RouteDecision;
@@ -483,6 +655,10 @@ export class OpenProviderSession {
 			attempts: verified.attempts,
 			retried: verified.retried,
 			verification: verified.report,
+			chain,
+			roleRuns: roleRuns.length > 0 ? roleRuns : undefined,
+			plan,
+			review,
 			summary: verified.summary,
 		};
 	}
