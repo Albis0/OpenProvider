@@ -34,10 +34,11 @@ Bunların dışında yeni "farklılaştırıcı özellik" önerilmeden önce, ö
 **v0.1 hedefi tek bir şey:** Yukarıdaki 3 boşluktan **SADECE BİRİNİ** (öncelik: #1, context seçimi) minimal ama çalışan şekilde kanıtlamak. Failover, provider abstraction, multi-agent orkestrasyon gibi şeyleri v0.1'e KATMA — bunlar zaten Cline SDK'sında var, yeniden yazmak zaman kaybı.
 
 **v0.1'de YAPILMAYACAKLAR (bilinçli olarak ertelendi):**
-- Kendi failover motorunu yazmak (Cline SDK / OmniRoute zaten çözüyor)
 - Kendi provider adapter katmanını yazmak (SDK zaten sağlıyor)
 - Multi-agent orkestrasyon (SDK'nın Multi-Agent Teams'i zaten var, önce onu incele)
 - LLM ile task sınıflandırma / dinamik routing (maliyet/gecikme riski yüksek, MVP'de kural bazlı yeter)
+
+**İstisna — 2026-08-03'te kapsama alındı:** "Kendi failover motorunu yazma" maddesi kaldırıldı. Kullanıcı NVIDIA rate limit'ine gerçek kullanımda takıldı ve şunu doğrudan istedi: kullanıcının kendi belirlediği sıralı bir provider listesi + sessiz-otomatik/sorarak geçiş tercihi. Bu, OmniRoute'un yaptığı genel failover değil — kullanıcı kontrollü, ücretsiz-katman-öncelikli bir mekanizma, projenin "provider bağımsızlık" hedefiyle doğrudan örtüşüyor. Detay ve kapsam bölünmesi: `.claude/docs/nvidia/` altındaki ilgili rapor.
 
 ---
 

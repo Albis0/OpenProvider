@@ -219,7 +219,7 @@ sağlayıcıyı kullanan **herkese** yarıyor, sadece NVIDIA'ya değil.
 
 ## Kaynaklar
 
-- Dropdown fix: commit `3b1ed7cc4`, [OpenAICompatible.tsx](../../apps/vscode/webview-ui/src/components/settings/providers/OpenAICompatible.tsx)
+- Dropdown fix: commit `3b1ed7cc4`, [OpenAICompatible.tsx](../../../apps/vscode/webview-ui/src/components/settings/providers/OpenAICompatible.tsx)
 - NVIDIA spec: `sdk/packages/llms/src/providers/providers.generated.ts:1821`
 - Bağlama checklist'i: `docs/fork/REPO-MAP.md`
 - Reasoning sorunu ve çözümü: `.claude/docs/2026-07-31-faz-5-provider-compat.md`
