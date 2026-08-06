@@ -93,11 +93,14 @@ export const CommandOutputContent = memo(
 
 		return (
 			<div
-				className={cn("w-full relative pb-0 overflow-visible border-t border-editor-group-border bg-code rounded-sm", {
-					"rounded-b-none": lineCount > 5,
-				})}>
+				className={cn(
+					"w-full relative pb-0 overflow-visible border-t border-hairline bg-code rounded-(--radius-surface)",
+					{
+						"rounded-b-none": lineCount > 5,
+					},
+				)}>
 				<div
-					className={cn("text-white scroll-smooth bg-code overflow-y-auto", {
+					className={cn("text-code-foreground scroll-smooth bg-code overflow-y-auto", {
 						"max-h-[75px]": !shouldAutoShow && !isOutputFullyExpanded,
 						"max-h-[200px]": !shouldAutoShow && isOutputFullyExpanded,
 						"overflow-y-visible": shouldAutoShow,

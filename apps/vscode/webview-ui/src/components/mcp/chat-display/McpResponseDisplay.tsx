@@ -47,7 +47,7 @@ const ResponseHeader = styled.div`
 const ResponseContainer = styled.div`
 	position: relative;
 	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: var(--vscode-editor-font-size, 12px);
+	font-size: var(--text-code, 12px);
 	background-color: ${CODE_BLOCK_BG_COLOR};
 	color: var(--vscode-editor-foreground, #d4d4d4);
 	border-radius: 3px;
@@ -69,7 +69,7 @@ const UrlText = styled.div`
 	word-break: break-all;
 	overflow-wrap: break-word;
 	font-family: var(--vscode-editor-font-family, monospace);
-	font-size: var(--vscode-editor-font-size, 12px);
+	font-size: var(--text-code, 12px);
 `
 
 interface McpResponseDisplayProps {

@@ -37,10 +37,10 @@ const TextContainer = styled.div`
 	display: -webkit-box;
 	-webkit-line-clamp: 3;
 	-webkit-box-orient: vertical;
-	font-size: var(--vscode-editor-font-size); /* Use editor font size */
+	font-size: var(--text-code, 12px);
 	opacity: 0.9; /* Slightly muted text */
 	line-height: 1.4; /* Improve readability */
-	max-height: calc(1.4 * var(--vscode-editor-font-size) * 3); /* approx 3 lines */
+	max-height: calc(1.4 * var(--text-code, 12px) * 3); /* approx 3 lines */
 `
 
 const DismissButton = styled(VSCodeButton)`

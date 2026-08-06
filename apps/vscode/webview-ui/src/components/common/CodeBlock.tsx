@@ -62,7 +62,7 @@ const StyledMarkdown = styled.div<{ forceWrap: boolean }>`
 		word-wrap: break-word;
 		border-radius: 5px;
 		background-color: ${CODE_BLOCK_BG_COLOR};
-		font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 12px));
+		font-size: var(--text-code, 12px);
 		font-family: var(--vscode-editor-font-family);
 	}
 
@@ -85,7 +85,7 @@ const StyledMarkdown = styled.div<{ forceWrap: boolean }>`
 		"Open Sans",
 		"Helvetica Neue",
 		sans-serif;
-	font-size: var(--vscode-editor-font-size, var(--vscode-font-size, 12px));
+	font-size: var(--text-code, 12px);
 	color: var(--vscode-editor-foreground, #fff);
 
 	p,

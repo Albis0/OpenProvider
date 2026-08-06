@@ -186,7 +186,7 @@ const SearchResultsDisplay: React.FC<SearchResultsDisplayProps> = ({
 									backgroundColor: "var(--vscode-textCodeBlock-background)",
 									padding: "8px",
 									borderRadius: "3px",
-									fontSize: "var(--vscode-editor-font-size)",
+									fontSize: "var(--text-code, 12px)",
 									fontFamily: "var(--vscode-editor-font-family)",
 									lineHeight: "1.5",
 									whiteSpace: "pre-wrap",

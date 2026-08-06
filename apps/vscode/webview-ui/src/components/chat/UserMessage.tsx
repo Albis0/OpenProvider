@@ -72,8 +72,8 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 
 	return (
 		<div
-			className={`group relative p-2.5 my-1 text-badge-foreground rounded-xs ${
-				messageTs && !isEditing ? "cursor-pointer pr-8" : ""
+			className={`group relative py-2 pl-3 pr-2.5 my-1 text-foreground rounded-(--radius-surface) bg-surface-raised border-l-2 border-l-turn-user transition-colors ${
+				messageTs && !isEditing ? "cursor-pointer pr-8 hover:bg-surface-hover" : ""
 			}`}
 			onClick={messageTs && !isEditing ? startEditing : undefined}
 			onKeyDown={
@@ -88,7 +88,6 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 			}
 			role={messageTs && !isEditing ? "button" : undefined}
 			style={{
-				backgroundColor: "var(--vscode-badge-background)",
 				whiteSpace: "pre-line",
 				wordWrap: "break-word",
 			}}
@@ -100,7 +99,7 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 					<TooltipTrigger asChild>
 						<button
 							aria-label="Edit and regenerate from this message"
-							className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-80 hover:opacity-100 bg-transparent border-0 text-badge-foreground cursor-pointer p-1"
+							className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-70 hover:opacity-100 bg-transparent border-0 text-description cursor-pointer p-1 transition-opacity"
 							onClick={(event) => {
 								event.stopPropagation()
 								startEditing()
@@ -114,7 +113,7 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 			{isEditing ? (
 				<div className="flex flex-col gap-2" onKeyDown={handleEditingKeyDown}>
 					<textarea
-						className="w-full box-border rounded-xs border border-vscode-input-border bg-vscode-input-background text-vscode-input-foreground p-2 text-sm resize-vertical"
+						className="w-full box-border rounded-(--radius-surface) border border-input-border bg-input-background text-input-foreground p-2 text-sm resize-vertical"
 						disabled={!!savingMode}
 						onChange={(event) => setEditedText(event.target.value)}
 						rows={Math.max(3, editedText.split("\n").length)}
@@ -123,7 +122,7 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 					{errorMessage && <div className="text-xs text-(--vscode-errorForeground)">{errorMessage}</div>}
 					<div className="flex items-center justify-between gap-1.5">
 						<button
-							className="shrink-0 whitespace-nowrap px-1 py-1 rounded-xs border-0 bg-transparent text-badge-foreground/80 hover:text-badge-foreground cursor-pointer text-xs"
+							className="shrink-0 whitespace-nowrap px-2 py-1 rounded-(--radius-surface) border-0 bg-transparent text-description hover:text-foreground cursor-pointer text-xs transition-colors"
 							disabled={!!savingMode}
 							onClick={cancelEditing}
 							type="button">
@@ -135,7 +134,7 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 								<TooltipTrigger asChild>
 									<span className="inline-flex shrink-0">
 										<button
-											className="whitespace-nowrap px-2 py-1 rounded-xs border border-vscode-button-border bg-transparent text-badge-foreground cursor-pointer disabled:opacity-60 text-xs"
+											className="whitespace-nowrap px-2 py-1 rounded-(--radius-surface) border border-hairline bg-transparent text-foreground hover:bg-surface-hover cursor-pointer disabled:opacity-60 text-xs transition-colors"
 											disabled={!!savingMode}
 											onClick={() => handleSave(false)}
 											type="button">
@@ -150,7 +149,7 @@ const UserMessage: React.FC<UserMessageProps> = ({ text, images, files, messageT
 									<TooltipTrigger asChild>
 										<span className="inline-flex shrink-0">
 											<button
-												className="whitespace-nowrap px-2 py-1 rounded-xs border border-vscode-button-border bg-transparent text-badge-foreground cursor-pointer disabled:opacity-60 text-xs"
+												className="whitespace-nowrap px-2 py-1 rounded-(--radius-surface) border border-hairline bg-transparent text-foreground hover:bg-surface-hover cursor-pointer disabled:opacity-60 text-xs transition-colors"
 												disabled={!!savingMode}
 												onClick={() => handleSave(true)}
 												type="button">

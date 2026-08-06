@@ -1432,8 +1432,12 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 					)}
 					<div
 						className={cn(
-							"absolute bottom-2.5 top-2.5 whitespace-pre-wrap break-words rounded-xs overflow-hidden bg-input-background",
-							isTextAreaFocused ? "left-3.5 right-3.5" : "left-3.5 right-3.5 border border-input-border",
+							"absolute bottom-2.5 top-2.5 left-3.5 right-3.5 whitespace-pre-wrap break-words rounded-(--radius-surface) overflow-hidden bg-input-background",
+							// The border is always drawn and only changes color on focus.
+							// Previously it was removed entirely while focused, so the
+							// box lost its outline and the text shifted by a pixel.
+							"border transition-colors duration-100",
+							isTextAreaFocused ? "border-(--vscode-focusBorder)" : "border-hairline",
 						)}
 						ref={highlightLayerRef}
 						style={{
@@ -1444,14 +1448,13 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							color: "transparent",
 							overflow: "hidden",
 							fontFamily: "var(--vscode-font-family)",
-							fontSize: "var(--vscode-editor-font-size)",
+							fontSize: "var(--vscode-font-size, 13px)",
 							lineHeight: "var(--vscode-editor-line-height)",
-							borderRadius: 2,
-							borderLeft: isTextAreaFocused ? 0 : undefined,
-							borderRight: isTextAreaFocused ? 0 : undefined,
-							borderTop: isTextAreaFocused ? 0 : undefined,
-							borderBottom: isTextAreaFocused ? 0 : undefined,
-							padding: `9px 28px ${9 + thumbnailsHeight}px 9px`,
+							// Kept in lockstep with the textarea's own radius below: this
+							// layer sits exactly on top of it, so a mismatch shows as a
+							// halo at the corners.
+							borderRadius: 4,
+							padding: `10px 28px ${10 + thumbnailsHeight}px 11px`,
 						}}
 					/>
 					<DynamicTextArea
@@ -1495,9 +1498,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							backgroundColor: "transparent",
 							color: "var(--vscode-input-foreground)",
 							//border: "1px solid var(--vscode-input-border)",
-							borderRadius: 2,
+							borderRadius: 4,
 							fontFamily: "var(--vscode-font-family)",
-							fontSize: "var(--vscode-editor-font-size)",
+							fontSize: "var(--vscode-font-size, 13px)",
 							lineHeight: "var(--vscode-editor-line-height)",
 							resize: "none",
 							overflowX: "hidden",
@@ -1514,7 +1517,9 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 							// borderLeft: "9px solid transparent", // NOTE: react-textarea-autosize doesn't calculate correct height when using borderLeft/borderRight so we need to use horizontal padding instead
 							// Instead of using boxShadow, we use a div with a border to better replicate the behavior when the textarea is focused
 							// boxShadow: "0px 0px 0px 1px var(--vscode-input-border)",
-							padding: "9px 28px 9px 9px",
+							// Must match the highlight layer's padding exactly, or the
+							// mention highlights drift away from the text they mark.
+							padding: "10px 28px 10px 11px",
 							cursor: "text",
 							flex: 1,
 							zIndex: 1,
@@ -1646,7 +1651,10 @@ const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 										aria-checked={mode === m.toLowerCase()}
 										className={cn(
 											"pt-0.5 pb-px px-2 z-10 text-xs w-1/2 text-center bg-transparent",
-											mode === m.toLowerCase() ? "text-white" : "text-input-foreground",
+											// The active label sits on the colored slider; use the
+											// theme's button foreground so it stays legible on light
+											// themes instead of hardcoding white.
+											mode === m.toLowerCase() ? "text-button-foreground" : "text-input-foreground",
 										)}
 										key={m}
 										onMouseLeave={() => setShownTooltipMode(null)}

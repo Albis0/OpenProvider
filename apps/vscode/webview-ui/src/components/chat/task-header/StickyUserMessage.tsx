@@ -44,23 +44,22 @@ export const StickyUserMessage: React.FC<StickyUserMessageProps> = memo(
 			<div
 				aria-label={`Scroll to your message: ${messageText}`}
 				className={cn(
-					"relative flex items-center px-2.5 pt-2 pb-2 cursor-pointer select-none",
-					"backdrop-blur-sm",
-					"hover:brightness-110",
+					"relative flex items-center py-2 pl-3 pr-2.5 cursor-pointer select-none",
+					// Same treatment as the message it points at: quiet surface with a
+					// left rule marking the speaker, rather than a saturated badge block.
+					"bg-surface-raised border-l-2 border-l-turn-user rounded-(--radius-surface)",
+					"backdrop-blur-sm transition-colors",
+					"hover:bg-surface-hover",
 				)}
 				onClick={handleClick}
 				onKeyDown={handleKeyDown}
 				role="button"
-				style={{
-					backgroundColor: "var(--vscode-badge-background)",
-					borderRadius: "3px",
-				}}
 				tabIndex={0}
 				title="Click to scroll to your message">
 				{/* Message text (truncated via CSS text-ellipsis) */}
 				<div
 					className={cn(
-						"flex-1 min-w-0 text-sm text-badge-foreground",
+						"flex-1 min-w-0 text-sm text-foreground",
 						"overflow-hidden text-ellipsis whitespace-nowrap",
 						"ph-no-capture",
 					)}>

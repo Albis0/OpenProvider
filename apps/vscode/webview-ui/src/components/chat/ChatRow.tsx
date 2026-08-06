@@ -304,7 +304,7 @@ export const ChatRowContent = memo(
 				case "command":
 					return [
 						<TerminalIcon className="text-foreground size-2" />,
-						<span className="font-bold text-foreground">OpenProvider wants to execute this command:</span>,
+						<span className="font-medium text-foreground">OpenProvider wants to execute this command:</span>,
 					]
 				case "use_mcp_server":
 					const mcpServerUse = JSON.parse(message.text || "{}") as ClineAskUseMcpServer
@@ -314,7 +314,7 @@ export const ChatRowContent = memo(
 						) : (
 							<span className="codicon codicon-server text-foreground mb-[-1.5px]" />
 						),
-						<span className="ph-no-capture font-bold text-foreground break-words">
+						<span className="ph-no-capture font-medium text-foreground break-words">
 							OpenProvider wants to {mcpServerUse.type === "use_mcp_tool" ? "use a tool" : "access a resource"} on
 							the <code className="break-all">{mcpServerUse.serverName}</code> MCP server:
 						</span>,
@@ -331,7 +331,7 @@ export const ChatRowContent = memo(
 				case "followup":
 					return [
 						<span className="codicon codicon-question text-foreground mb-[-1.5px]" />,
-						<span className="font-bold text-foreground">OpenProvider has a question:</span>,
+						<span className="font-medium text-foreground">OpenProvider has a question:</span>,
 					]
 				default:
 					return [null, null]
@@ -462,7 +462,7 @@ export const ChatRowContent = memo(
 								<FilePlus2Icon className="size-2" />
 								{tool.operationIsLocatedInWorkspace === false &&
 									toolIcon("sign-out", "yellow", -90, "This file is outside of your workspace")}
-								<span className="font-bold">OpenProvider wants to create a new file:</span>
+								<span className="font-medium">OpenProvider wants to create a new file:</span>
 							</div>
 							{backgroundEditEnabled && tool.path && tool.content ? (
 								<DiffEditRow patch={tool.content} path={tool.path} startLineNumbers={tool.startLineNumbers} />
@@ -485,7 +485,7 @@ export const ChatRowContent = memo(
 								{isImage ? <ImageUpIcon className="size-2" /> : <FileCode2Icon className="size-2" />}
 								{tool.operationIsLocatedInWorkspace === false &&
 									toolIcon("sign-out", "yellow", -90, "This file is outside of your workspace")}
-								<span className="font-bold">OpenProvider wants to read this file:</span>
+								<span className="font-medium">OpenProvider wants to read this file:</span>
 							</div>
 							<div className="bg-code rounded-sm overflow-hidden border border-editor-group-border">
 								<div
@@ -589,7 +589,7 @@ export const ChatRowContent = memo(
 								{toolIcon("search")}
 								{tool.operationIsLocatedInWorkspace === false &&
 									toolIcon("sign-out", "yellow", -90, "This is outside of your workspace")}
-								<span className="font-bold">
+								<span className="font-medium">
 									OpenProvider wants to search this directory for{" "}
 									<code className="break-all">{tool.regex}</code>:
 								</span>
@@ -608,7 +608,7 @@ export const ChatRowContent = memo(
 						<div>
 							<div className={HEADER_CLASSNAMES}>
 								<FoldVerticalIcon className="size-2" />
-								<span className="font-bold">OpenProvider is condensing the conversation:</span>
+								<span className="font-medium">OpenProvider is condensing the conversation:</span>
 							</div>
 							<div className="bg-code overflow-hidden border border-editor-group-border rounded-[3px]">
 								<div
@@ -651,7 +651,7 @@ export const ChatRowContent = memo(
 								<Link2Icon className="size-2" />
 								{tool.operationIsLocatedInWorkspace === false &&
 									toolIcon("sign-out", "yellow", -90, "This URL is external")}
-								<span className="font-bold">
+								<span className="font-medium">
 									{message.type === "ask"
 										? "OpenProvider wants to fetch content from this URL:"
 										: "OpenProvider fetched content from this URL:"}
@@ -680,7 +680,7 @@ export const ChatRowContent = memo(
 								<SearchIcon className="size-2 rotate-90" />
 								{tool.operationIsLocatedInWorkspace === false &&
 									toolIcon("sign-out", "yellow", -90, "This search is external")}
-								<span className="font-bold">
+								<span className="font-medium">
 									{message.type === "ask"
 										? "OpenProvider wants to search the web for:"
 										: "OpenProvider searched the web for:"}
@@ -698,7 +698,7 @@ export const ChatRowContent = memo(
 						<div>
 							<div className={HEADER_CLASSNAMES}>
 								<LightbulbIcon className="size-2" />
-								<span className="font-bold">OpenProvider loaded the skill:</span>
+								<span className="font-medium">OpenProvider loaded the skill:</span>
 							</div>
 							<div className="bg-code border border-editor-group-border overflow-hidden rounded-xs py-[9px] px-2.5">
 								<span className="ph-no-capture font-medium">{tool.path}</span>
@@ -1098,7 +1098,7 @@ export const ChatRowContent = memo(
 							<div>
 								<div className={HEADER_CLASSNAMES}>
 									<FilePlus2Icon className="size-2" />
-									<span className="text-foreground font-bold">OpenProvider wants to start a new task:</span>
+									<span className="text-foreground font-medium">OpenProvider wants to start a new task:</span>
 								</div>
 								<NewTaskPreview context={message.text || ""} />
 							</div>
@@ -1108,7 +1108,7 @@ export const ChatRowContent = memo(
 							<div>
 								<div className={HEADER_CLASSNAMES}>
 									<FilePlus2Icon className="size-2" />
-									<span className="text-foreground font-bold">
+									<span className="text-foreground font-medium">
 										OpenProvider wants to condense your conversation:
 									</span>
 								</div>
@@ -1120,7 +1120,7 @@ export const ChatRowContent = memo(
 							<div>
 								<div className={HEADER_CLASSNAMES}>
 									<FilePlus2Icon className="size-2" />
-									<span className="text-foreground font-bold">
+									<span className="text-foreground font-medium">
 										OpenProvider wants to create a Github issue:
 									</span>
 								</div>

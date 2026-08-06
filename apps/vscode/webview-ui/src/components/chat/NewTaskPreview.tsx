@@ -7,7 +7,7 @@ interface NewTaskPreviewProps {
 
 const NewTaskPreview: React.FC<NewTaskPreviewProps> = ({ context }) => {
 	return (
-		<div className="bg-(--vscode-badge-background) text-(--vscode-badge-foreground) rounded-[3px] p-[14px] pb-[6px]">
+		<div className="bg-surface-raised text-foreground border-l-2 border-l-turn-user rounded-(--radius-surface) py-3 px-3 pb-1.5">
 			<span style={{ fontWeight: "bold" }}>Task</span>
 			<MarkdownBlock markdown={context} />
 		</div>

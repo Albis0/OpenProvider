@@ -1,6 +1,46 @@
 /* Editor theme mapping */
 @theme {
 	--color-cline: #9663f1;
+
+	/*
+	 * OpenProvider surface tokens.
+	 *
+	 * Everything here is derived from a VS Code theme variable rather than a
+	 * fixed hex, so the chat reads correctly in light, dark and high-contrast
+	 * themes. Literal colors (`bg-white/2`, `text-white`) were the main reason
+	 * the old surfaces vanished on light themes.
+	 */
+
+	/*
+	 * Raised panel that still belongs to the sidebar it sits on.
+	 *
+	 * Built from --vscode-editor-foreground rather than a toolbar/hover color:
+	 * several themes leave the hover colors fully transparent, which made this
+	 * surface render as nothing at all. Mixing the foreground into the
+	 * background is defined in every theme and self-inverting — it lightens on
+	 * dark themes and darkens on light ones.
+	 */
+	--color-surface-raised: color-mix(in srgb, var(--vscode-editor-foreground) 7%, var(--vscode-sideBar-background));
+	--color-surface-hover: color-mix(in srgb, var(--vscode-editor-foreground) 12%, var(--vscode-sideBar-background));
+	/* Hairline that reads as a separator, not as a box. */
+	--color-hairline: color-mix(in srgb, var(--vscode-panel-border) 60%, transparent);
+	/* Marks who is speaking. See the turn rule in ChatRow/UserMessage. */
+	--color-turn-user: var(--vscode-textLink-foreground);
+
+	/*
+	 * One radius for chat surfaces. The UI previously mixed rounded-full (999px),
+	 * rounded-xs (2px) and rounded-lg on adjacent elements.
+	 */
+	--radius-surface: 4px;
+
+	/*
+	 * Code inside chat is reference material, not an editing surface, so it is
+	 * set one step down from the editor. Inheriting --vscode-editor-font-size
+	 * made snippets tower over the prose around them for anyone running a
+	 * comfortable editor size.
+	 */
+	--text-code: 12px;
+	--leading-code: 1.5;
 	--color-background: var(--vscode-sideBar-background);
 	--color-border: var(--vscode-focusBorder);
 	--color-border-panel: var(--vscode-panel-border);
@@ -295,9 +335,13 @@
 		@apply text-base text-foreground font-base;
 
 		pre {
-			@apply bg-code rounded-xs overflow-x-auto overflow-y-hidden;
-			margin: 13px 0;
-			padding: 10px 10px;
+			@apply bg-code overflow-x-auto overflow-y-hidden font-mono;
+			border-radius: var(--radius-surface);
+			border: 1px solid var(--color-hairline);
+			font-size: var(--text-code);
+			line-height: var(--leading-code);
+			margin: 10px 0;
+			padding: 10px 12px;
 			max-width: calc(100vw - 20px);
 			padding-right: 70px;
 		}
@@ -349,7 +393,7 @@
 		}
 
 		code:not(pre > code) {
-			@apply font-mono text-preformat bg-code-block-background border border-text-separator rounded-xs py-0.5 whitespace-pre-line break-words text-editor-size;
+			@apply font-mono text-preformat bg-code-block-background border border-text-separator rounded-xs py-0.5 whitespace-pre-line break-words text-code;
 		}
 
 		/* Inline cursor container - adds blinking cursor after last child */

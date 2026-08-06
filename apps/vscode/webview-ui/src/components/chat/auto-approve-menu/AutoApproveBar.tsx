@@ -145,7 +145,7 @@ const AutoApproveBar = ({ style }: AutoApproveBarProps) => {
 
 			<div
 				aria-label={isModalVisible ? "Close auto-approve settings" : "Open auto-approve settings"}
-				className="group cursor-pointer pt-3 pb-3.5 pr-2 px-3.5 flex items-center justify-between gap-0"
+				className="group cursor-pointer py-2 pr-2 px-3.5 flex items-center justify-between gap-0 text-xs text-description hover:text-foreground transition-colors"
 				onClick={() => {
 					setIsModalVisible((prev) => !prev)
 				}}

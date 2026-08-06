@@ -12,12 +12,8 @@ export const SuggestedTasks: React.FC<{ shouldShowQuickWins: boolean }> = ({ sho
 	if (shouldShowQuickWins) {
 		return (
 			<div className="px-4 pt-1 pb-3 select-none">
-				{" "}
-				<h2 className="text-sm font-medium mb-2.5 text-center text-gray">
-					Quick <span className="text-white">[Wins]</span> with Cline
-				</h2>
-				<div className="flex flex-col space-y-1">
-					{" "}
+				<h2 className="text-xs font-medium mb-2 text-description uppercase tracking-wide">Try something</h2>
+				<div className="flex flex-col gap-1.5">
 					{quickWinTasks.map((task: QuickWinTask) => (
 						<QuickWinCard key={task.id} onExecute={() => handleExecuteQuickWin(task.prompt)} task={task} />
 					))}

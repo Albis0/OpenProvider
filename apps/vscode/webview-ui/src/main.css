@@ -165,7 +165,7 @@ vscode-dropdown::part(listbox) {
 .mention-context-highlight-with-shadow,
 .slash-command-match-textarea-highlight {
 	font-family: var(--vscode-font-family);
-	font-size: var(--vscode-editor-font-size);
+	font-size: var(--vscode-font-size, 13px);
 	line-height: var(--vscode-editor-line-height);
 }
 

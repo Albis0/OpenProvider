@@ -4,22 +4,30 @@ import styled from "styled-components"
 import { CODE_BLOCK_BG_COLOR } from "@/components/common/CodeBlock"
 import { TaskServiceClient } from "@/services/grpc-client"
 
+/*
+ * Selected/hover previously hardcoded `white` text on --vscode-focusBorder,
+ * which is unreadable on light themes where that border is a pale blue. The
+ * button colors now come from the theme's own button roles, which are
+ * guaranteed to be a legible pair in every theme.
+ */
 const OptionButton = styled.button<{ $isSelected?: boolean; $isNotSelectable?: boolean }>`
-	padding: 8px 12px;
-	background: ${(props) => (props.$isSelected ? "var(--vscode-focusBorder)" : CODE_BLOCK_BG_COLOR)};
-	color: ${(props) => (props.$isSelected ? "white" : "var(--vscode-input-foreground)")};
-	border: 1px solid var(--vscode-editorGroup-border);
-	border-radius: 2px;
+	padding: 6px 10px;
+	background: ${(props) => (props.$isSelected ? "var(--vscode-button-background)" : CODE_BLOCK_BG_COLOR)};
+	color: ${(props) => (props.$isSelected ? "var(--vscode-button-foreground)" : "var(--vscode-input-foreground)")};
+	border: 1px solid ${(props) => (props.$isSelected ? "transparent" : "var(--vscode-editorGroup-border)")};
+	border-radius: 4px;
 	cursor: ${(props) => (props.$isNotSelectable ? "default" : "pointer")};
 	text-align: left;
 	font-size: 12px;
+	transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 
 	${(props) =>
 		!props.$isNotSelectable &&
 		`
 		&:hover {
-			background: var(--vscode-focusBorder);
-			color: white;
+			background: var(--vscode-button-background);
+			color: var(--vscode-button-foreground);
+			border-color: transparent;
 		}
 	`}
 `
