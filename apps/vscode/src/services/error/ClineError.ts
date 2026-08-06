@@ -11,7 +11,6 @@ export enum ClineErrorType {
 	Auth = "auth",
 	RateLimit = "rateLimit",
 	Balance = "balance",
-	SpendLimit = "spendLimit",
 	QuotaExceeded = "quotaExceeded",
 	Entitlement = "entitlement",
 	OrgClinePassRestriction = "orgClinePassRestriction",
@@ -162,12 +161,6 @@ export class ClineError extends Error {
 		// Check balance error first (most specific)
 		if (code === "insufficient_credits" && typeof details?.current_balance === "number") {
 			return ClineErrorType.Balance
-		}
-
-		// Check spend limit exceeded (org-enforced budget cap, 429 SPEND_LIMIT_EXCEEDED)
-		// Must be checked before the generic rate-limit check since both use 429
-		if (code === "SPEND_LIMIT_EXCEEDED" || details?.code === "SPEND_LIMIT_EXCEEDED") {
-			return ClineErrorType.SpendLimit
 		}
 
 		if (

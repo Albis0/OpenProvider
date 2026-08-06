@@ -2159,17 +2159,6 @@ export function reshapeErrorForWebview(
 				},
 			})
 		}
-		if (lower.includes("spend_limit_exceeded") || lower.includes("spend limit")) {
-			return JSON.stringify({
-				message: rawMessage,
-				code: "SPEND_LIMIT_EXCEEDED",
-				providerId,
-				details: {
-					code: "SPEND_LIMIT_EXCEEDED",
-					message: rawMessage,
-				},
-			})
-		}
 		const notFoundMessage = describeModelNotFoundError(rawMessage)
 		if (notFoundMessage) {
 			return notFoundMessage
@@ -2195,23 +2184,6 @@ export function reshapeErrorForWebview(
 		})
 	}
 
-	// Detect spend limit exceeded (429)
-	if (code === "SPEND_LIMIT_EXCEEDED") {
-		return JSON.stringify({
-			message: (parsed.message as string) ?? rawMessage,
-			code: "SPEND_LIMIT_EXCEEDED",
-			providerId,
-			details: {
-				code: "SPEND_LIMIT_EXCEEDED",
-				limit_scope: parsed.limit_scope,
-				budget_period: parsed.budget_period,
-				limit_usd: parsed.limit_usd,
-				spent_usd: parsed.spent_usd,
-				resets_at: parsed.resets_at,
-				message: parsed.message,
-			},
-		})
-	}
 
 	// For other structured errors, pass through the parsed JSON so
 	// ClineError.parse() can still extract what it can.

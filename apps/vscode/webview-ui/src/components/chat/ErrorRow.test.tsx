@@ -3,10 +3,6 @@ import { render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import ErrorRow from "./ErrorRow"
 
-// Mock SpendLimitError component
-vi.mock("@/components/chat/SpendLimitError", () => ({
-	default: ({ message }: { message: string }) => <div data-testid="spend-limit-error">{message}</div>,
-}))
 
 // Mock ClineError
 vi.mock("../../../../src/services/error/ClineError", () => ({
@@ -14,7 +10,6 @@ vi.mock("../../../../src/services/error/ClineError", () => ({
 		parse: vi.fn(),
 	},
 	ClineErrorType: {
-		SpendLimit: "spendLimit",
 		RateLimit: "rateLimit",
 		QuotaExceeded: "quotaExceeded",
 	},
@@ -62,30 +57,6 @@ describe("ErrorRow", () => {
 	})
 
 	describe("API error handling", () => {
-		it("renders spend limit error", async () => {
-			const mockClineError = {
-				message: "Spend limit reached",
-				isErrorType: vi.fn((type) => type === "spendLimit"),
-				_error: {
-					details: {
-						budget_period: "monthly",
-						limit_usd: 100,
-						message: "You have reached your spend limit.",
-						resets_at: "2026-08-01T00:00:00Z",
-						spent_usd: 100,
-					},
-				},
-			}
-
-			const { ClineError } = await import("../../../../src/services/error/ClineError")
-			vi.mocked(ClineError.parse).mockReturnValue(mockClineError as any)
-
-			render(<ErrorRow apiRequestFailedMessage="Spend limit reached" errorType="error" message={mockMessage} />)
-
-			expect(screen.getByTestId("spend-limit-error")).toBeInTheDocument()
-			expect(screen.getByText("You have reached your spend limit.")).toBeInTheDocument()
-		})
-
 		it("renders rate limit error with request ID", async () => {
 			const mockClineError = {
 				message: "Rate limit exceeded",

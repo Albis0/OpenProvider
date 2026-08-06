@@ -1161,38 +1161,6 @@ describe("translateSessionEvent — agent_event error", () => {
 		expect(parsed.details.current_balance).toBe(0)
 	})
 
-	it("reshapes SPEND_LIMIT_EXCEEDED error into ClineError-compatible format", () => {
-		const state = new MessageTranslatorState()
-		const errorJson = JSON.stringify({
-			code: "SPEND_LIMIT_EXCEEDED",
-			limit_scope: "user",
-			budget_period: "daily",
-			limit_usd: 20.0,
-			spent_usd: 20.5,
-			resets_at: "2026-05-01T00:00:00Z",
-			message: "Your daily spend limit of $20.00 has been reached.",
-		})
-		const event: CoreSessionEvent = {
-			type: "agent_event",
-			payload: {
-				sessionId: "session-1",
-				event: {
-					type: "error",
-					error: { message: errorJson },
-				} as AgentEvent,
-			},
-		}
-
-		const result = translateSessionEvent(event, state)
-		expect(result.messages).toHaveLength(2)
-
-		const failedText = result.messages[1].text!
-		const parsed = JSON.parse(failedText)
-		expect(parsed.code).toBe("SPEND_LIMIT_EXCEEDED")
-		expect(parsed.providerId).toBe("cline")
-		expect(parsed.details.budget_period).toBe("daily")
-		expect(parsed.details.limit_usd).toBe(20.0)
-	})
 
 	it("reshapes plain-text insufficient credits error into ClineError-compatible format", () => {
 		const state = new MessageTranslatorState()
@@ -1244,30 +1212,6 @@ describe("translateSessionEvent — agent_event error", () => {
 		expect(parsed.code).toBe("insufficient_credits")
 		expect(parsed.providerId).toBe("cline")
 		expect(parsed.details.current_balance).toBe(0)
-	})
-
-	it("reshapes plain-text spend limit error into ClineError-compatible format", () => {
-		const state = new MessageTranslatorState()
-		const event: CoreSessionEvent = {
-			type: "agent_event",
-			payload: {
-				sessionId: "session-1",
-				event: {
-					type: "error",
-					error: {
-						message: "Your daily spend limit of $20.00 has been reached.",
-					},
-				} as AgentEvent,
-			},
-		}
-
-		const result = translateSessionEvent(event, state)
-		expect(result.messages).toHaveLength(2)
-
-		const failedText = result.messages[1].text!
-		const parsed = JSON.parse(failedText)
-		expect(parsed.code).toBe("SPEND_LIMIT_EXCEEDED")
-		expect(parsed.providerId).toBe("cline")
 	})
 
 	it("preserves ClinePass period limit errors for specialized webview rendering", () => {
