@@ -16,6 +16,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_MODE, isMode, type Mode, MODES } from "./modes";
+import { isRole, type Role, ROLES } from "./roles";
 
 export const CONFIG_FILENAME = "openprovider.config.json";
 
@@ -26,9 +27,50 @@ export interface ModeTarget {
 	model?: string;
 }
 
+/**
+ * Where one role's turns go.
+ *
+ * `mode` is what makes a role useful without duplicating the whole routing
+ * table: a role can borrow an existing mode's provider ("the reviewer routes
+ * like a `review` turn") instead of naming a provider of its own. An explicit
+ * `provider` still wins when the user wants one.
+ */
+export interface RoleTarget {
+	/** Provider id. When unset, `mode` decides. */
+	provider?: string;
+	/** Model id. Falls back to the provider's stored default. */
+	model?: string;
+	/** Route this role as if it were this mode. */
+	mode?: Mode;
+	/** Off by default for planner/reviewer — see `RoleConfig.enabled`. */
+	enabled?: boolean;
+}
+
+/**
+ * The planner→executor→reviewer setup.
+ *
+ * Defaults keep the chain **off**. Three roles means three round trips and
+ * three times the tokens for a task that may well be one file and one edit;
+ * turning that on silently would make every existing user's turns slower and
+ * more expensive without asking. The executor alone reproduces the old
+ * single-agent behaviour exactly.
+ */
+export interface RoleConfig {
+	/** Master switch. When false, only the executor ever runs. */
+	enabled: boolean;
+	roles: Partial<Record<Role, RoleTarget>>;
+}
+
+export const EMPTY_ROLE_CONFIG: RoleConfig = {
+	enabled: false,
+	roles: {},
+};
+
 export interface RoutingConfig {
 	defaultMode: Mode;
 	modes: Partial<Record<Mode, ModeTarget>>;
+	/** Multi-agent role pipeline. Disabled unless the config says otherwise. */
+	roleConfig: RoleConfig;
 	/** Providers to try, in order, when a mode's provider cannot serve. */
 	fallback: string[];
 	/** Providers the user has switched off by hand. Skipped entirely. */
@@ -44,6 +86,7 @@ export interface RoutingConfig {
 export const EMPTY_CONFIG: RoutingConfig = {
 	defaultMode: DEFAULT_MODE,
 	modes: {},
+	roleConfig: { ...EMPTY_ROLE_CONFIG },
 	fallback: [],
 	disabled: [],
 	maxOutputTokens: 4096,
@@ -66,6 +109,58 @@ function parseModeTarget(value: unknown): ModeTarget | undefined {
 	return {
 		provider: record.provider,
 		model: typeof record.model === "string" ? record.model : undefined,
+	};
+}
+
+function parseRoleTarget(value: unknown): RoleTarget | undefined {
+	if (!value || typeof value !== "object") {
+		return undefined;
+	}
+	const record = value as Record<string, unknown>;
+
+	const target: RoleTarget = {};
+	if (typeof record.provider === "string" && record.provider.length > 0) {
+		target.provider = record.provider;
+	}
+	if (typeof record.model === "string" && record.model.length > 0) {
+		target.model = record.model;
+	}
+	if (typeof record.mode === "string" && isMode(record.mode)) {
+		target.mode = record.mode;
+	}
+	if (typeof record.enabled === "boolean") {
+		target.enabled = record.enabled;
+	}
+
+	// An entry that says nothing is not an error, it is just noise — but
+	// returning it would make `roles.planner: {}` look configured when it is
+	// not, which changes whether the chain runs.
+	return Object.keys(target).length > 0 ? target : undefined;
+}
+
+export function parseRoleConfig(raw: unknown): RoleConfig {
+	if (!raw || typeof raw !== "object") {
+		return { ...EMPTY_ROLE_CONFIG };
+	}
+	const record = raw as Record<string, unknown>;
+
+	const roles: Partial<Record<Role, RoleTarget>> = {};
+	const rawRoles = record.roles;
+	if (rawRoles && typeof rawRoles === "object") {
+		for (const [key, value] of Object.entries(rawRoles)) {
+			if (!isRole(key)) {
+				continue;
+			}
+			const target = parseRoleTarget(value);
+			if (target) {
+				roles[key] = target;
+			}
+		}
+	}
+
+	return {
+		enabled: record.enabled === true,
+		roles,
 	};
 }
 
@@ -106,6 +201,7 @@ export function parseConfig(raw: unknown): RoutingConfig {
 	return {
 		defaultMode,
 		modes,
+		roleConfig: parseRoleConfig(record.roleConfig),
 		fallback: asStringArray(record.fallback),
 		disabled: asStringArray(record.disabled),
 		maxOutputTokens,
@@ -173,9 +269,20 @@ export function suggestConfig(availableProviders: readonly string[]): RoutingCon
 		modes[mode] = { provider: byMode[mode] };
 	}
 
+	// Roles are written out so the file shows what is available, but the chain
+	// stays off: a suggested config is what a first run gets, and a first run
+	// tripling its own token cost without being asked is the wrong default.
+	const roles: Partial<Record<Role, RoleTarget>> = {};
+	for (const role of ROLES) {
+		roles[role] = {
+			mode: role === "planner" ? "plan" : role === "reviewer" ? "review" : "code",
+		};
+	}
+
 	return {
 		defaultMode: DEFAULT_MODE,
 		modes,
+		roleConfig: { enabled: false, roles },
 		fallback: ordered,
 		disabled: [],
 		maxOutputTokens: 4096,

@@ -17,6 +17,7 @@
 import type { CredentialSource } from "../provider-settings";
 import type { RoutingConfig } from "./config";
 import { type Mode, resolveMode } from "./modes";
+import { CORE_ROLE, type Role } from "./roles";
 
 export interface RouteDecision {
 	mode: Mode;
@@ -31,6 +32,8 @@ export interface RouteDecision {
 	notices: string[];
 	/** True when the mode's configured provider was not the one chosen. */
 	usedFallback: boolean;
+	/** Which seat this turn was routed for. Absent on plain single-agent turns. */
+	role?: Role;
 }
 
 export class NoProviderAvailableError extends Error {
@@ -99,23 +102,67 @@ export class Router {
 	/**
 	 * The order to try, for a mode: its configured provider first, then the
 	 * fallback chain, with duplicates removed.
+	 *
+	 * A role, when given, gets first refusal: an explicit `provider` on the
+	 * role wins outright, otherwise the role can borrow another mode's provider
+	 * before the mode's own is considered.
 	 */
-	private candidatesFor(mode: Mode): string[] {
+	private candidatesFor(mode: Mode, role?: Role): string[] {
+		const ordered: string[] = [];
+
+		if (role) {
+			const target = this.config.roleConfig.roles[role];
+			if (target?.provider) {
+				ordered.push(target.provider);
+			} else if (target?.mode) {
+				const borrowed = this.config.modes[target.mode]?.provider;
+				if (borrowed) {
+					ordered.push(borrowed);
+				}
+			}
+		}
+
 		const preferred = this.config.modes[mode]?.provider;
-		const ordered = preferred
-			? [preferred, ...this.config.fallback]
-			: [...this.config.fallback];
+		if (preferred) {
+			ordered.push(preferred);
+		}
+		ordered.push(...this.config.fallback);
+
 		return [...new Set(ordered)];
 	}
 
-	route(prompt: string, explicitMode?: string): RouteDecision {
+	/**
+	 * The model a role should use, when it names one. Falls back to the mode's
+	 * model so a role that only redirects the provider keeps a sane model.
+	 */
+	private modelFor(mode: Mode, role: Role | undefined, providerId: string):
+		| string
+		| undefined {
+		if (role) {
+			const target = this.config.roleConfig.roles[role];
+			if (target?.model && target.provider === providerId) {
+				return target.model;
+			}
+			if (target?.mode) {
+				const borrowed = this.config.modes[target.mode];
+				if (borrowed?.provider === providerId && borrowed.model) {
+					return borrowed.model;
+				}
+			}
+		}
+		return this.config.modes[mode]?.model;
+	}
+
+	route(prompt: string, explicitMode?: string, role?: Role): RouteDecision {
 		const suggestion = resolveMode(prompt, explicitMode);
-		const candidates = this.candidatesFor(suggestion.mode);
+		const candidates = this.candidatesFor(suggestion.mode, role);
 		const notices: string[] = [];
 
 		if (candidates.length === 0) {
 			notices.push(
-				`No provider is configured for "${suggestion.mode}" and the fallback list is empty.`,
+				role
+					? `No provider is configured for the ${role} role and the fallback list is empty.`
+					: `No provider is configured for "${suggestion.mode}" and the fallback list is empty.`,
 			);
 			throw new NoProviderAvailableError(notices);
 		}
@@ -140,15 +187,21 @@ export class Router {
 
 			const usedFallback = position > 0;
 			if (usedFallback) {
-				notices.push(`Switching to ${providerId} for this "${suggestion.mode}" turn.`);
+				notices.push(
+					role
+						? `Switching to ${providerId} for the ${role} role.`
+						: `Switching to ${providerId} for this "${suggestion.mode}" turn.`,
+				);
 			}
 
 			return {
 				mode: suggestion.mode,
 				modeMatched: suggestion.matched,
 				modeTrigger: suggestion.trigger,
+				role,
 				providerId,
-				modelId: this.config.modes[suggestion.mode]?.model ?? credentials.model,
+				modelId:
+					this.modelFor(suggestion.mode, role, providerId) ?? credentials.model,
 				apiKey: credentials.apiKey,
 				maxOutputTokens: this.config.maxOutputTokens,
 				notices,
@@ -163,8 +216,8 @@ export class Router {
 	 * Where a mode would go if `excluding` were unavailable, without changing
 	 * anything. Needed to ask "switch to X?" before deciding to.
 	 */
-	peekAlternative(mode: Mode, excluding: string): string | undefined {
-		return this.candidatesFor(mode).find(
+	peekAlternative(mode: Mode, excluding: string, role?: Role): string | undefined {
+		return this.candidatesFor(mode, role).find(
 			(providerId) =>
 				providerId !== excluding && this.skipReason(providerId) === undefined,
 		);
