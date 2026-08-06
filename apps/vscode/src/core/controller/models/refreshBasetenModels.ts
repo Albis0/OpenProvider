@@ -274,7 +274,7 @@ function generateModelDescription(rawModel: any, staticModelInfo?: any): string 
 		// Add technical details if available
 		const technicalDetails = []
 		if (contextWindow) {
-			technicalDetails.push(`${contextWindow.toLocaleString()} token context`)
+			technicalDetails.push(`${contextWindow.toLocaleString("en-US")} token context`)
 		}
 		if (quantization) {
 			technicalDetails.push(`${quantization} precision`)
@@ -297,7 +297,7 @@ function generateModelDescription(rawModel: any, staticModelInfo?: any): string 
 	const ownedBy = rawModel.owned_by || "Baseten"
 
 	if (contextWindow) {
-		return `${ownedBy} ${modelName} with ${contextWindow.toLocaleString()} token context window`
+		return `${ownedBy} ${modelName} with ${contextWindow.toLocaleString("en-US")} token context window`
 	}
 
 	return `${ownedBy} model: ${modelName}`

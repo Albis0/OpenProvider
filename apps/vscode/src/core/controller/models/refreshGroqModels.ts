@@ -309,8 +309,8 @@ function generateModelDescription(rawModel: any, staticModelInfo?: any): string 
 
 	// Special handling for new models
 	if (modelId.includes("compound")) {
-		return `${ownedBy}'s ${modelId} model with ${contextWindow.toLocaleString()} token context window - Advanced compound architecture`
+		return `${ownedBy}'s ${modelId} model with ${contextWindow.toLocaleString("en-US")} token context window - Advanced compound architecture`
 	}
 
-	return `${ownedBy} model with ${contextWindow.toLocaleString()} token context window`
+	return `${ownedBy} model with ${contextWindow.toLocaleString("en-US")} token context window`
 }
