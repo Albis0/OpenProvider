@@ -462,15 +462,62 @@ const miniMaxThinkingRule: ProviderOptionRule = {
 		),
 };
 
+/**
+ * Gateway ids known to accept the routed `reasoning.enabled` / `reasoning.exclude`
+ * shape on their OpenAI-compatible surface, beyond the Cline gateway family
+ * (handled separately via `isClineProvider`). Everything else that serves GLM
+ * over a raw OpenAI-compatible endpoint (NVIDIA, Together, Chutes, ...)
+ * rejects an unrecognized top-level `reasoning` field outright:
+ *   "Unsupported parameter(s): reasoning"
+ * measured against NVIDIA's `z-ai/glm-5.2` on 2026-08-02.
+ */
+const GLM_ROUTED_REASONING_SHAPE_PROVIDER_IDS = new Set([
+	"openrouter",
+	"vercel-ai-gateway",
+]);
+
+function supportsRoutedGlmReasoningShape(
+	input: ProviderOptionMatchInput,
+): boolean {
+	return (
+		isClineProvider(input.request.providerId) ||
+		GLM_ROUTED_REASONING_SHAPE_PROVIDER_IDS.has(input.request.providerId)
+	);
+}
+
+/**
+ * Generic thinking/effort options (`thinking.type`, `effort`, `reasoningEffort`,
+ * `reasoningSummary`) are as unwelcome on raw OpenAI-compatible GLM endpoints as
+ * the routed `reasoning` shape is, so this suppression applies to every GLM
+ * model regardless of provider — only the shape used to *express* reasoning
+ * (routed vs. none) differs by provider.
+ */
+const nonRoutedGlmReasoningSuppressionRule: ProviderOptionRule = {
+	id: "family.glm.non-routed.suppress-generic-reasoning",
+	phase: "model-overlay",
+	description:
+		"GLM models on providers without a supported routed-reasoning shape get no generic thinking/effort fields either.",
+	applies: (input) =>
+		!usesGlmThinkingProviderRouting(input) &&
+		isGlmModel(input.request, input.context) &&
+		!supportsRoutedGlmReasoningShape(input),
+	suppresses: { genericThinking: true, genericEffort: true },
+	build: () => undefined,
+};
+
 const routedGlmReasoningRule: ProviderOptionRule = {
 	id: "family.glm.routed-reasoning",
 	phase: "model-overlay",
 	description:
-		"Routed GLM models use the generic reasoning include/exclude shape, not thinking.type.",
+		"Routed GLM models on gateways that support the reasoning include/exclude shape use it instead of thinking.type.",
 	applies: (input) =>
 		!usesGlmThinkingProviderRouting(input) &&
-		isGlmModel(input.request, input.context),
-	suppresses: { genericThinking: true },
+		isGlmModel(input.request, input.context) &&
+		supportsRoutedGlmReasoningShape(input),
+	// Without genericEffort suppressed, buildCompatibleEffortOptions still
+	// attaches effort/reasoningEffort/reasoningSummary alongside this rule's
+	// reasoning.enabled shape.
+	suppresses: { genericThinking: true, genericEffort: true },
 	build: (input) =>
 		buildRoutedGlmReasoningProviderOptionsPatch(
 			input.request,
@@ -507,6 +554,7 @@ export const PROVIDER_OPTION_RULES: ReadonlyArray<ProviderOptionRule> = [
 	nativeZaiGlmThinkingRule,
 	miniMaxThinkingRule,
 	routedGlmReasoningRule,
+	nonRoutedGlmReasoningSuppressionRule,
 ];
 
 export function matchProviderOptionRules(

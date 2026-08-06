@@ -777,6 +777,32 @@ describe("composeAiSdkProviderOptions: family/provider thinking patches", () => 
 			],
 		},
 		{
+			// Regression: NVIDIA (and any other raw openai-compatible provider
+			// with no dedicated reasoning rule) is not a routed GLM gateway --
+			// its OpenAI Chat Completions surface rejects an unrecognized
+			// top-level reasoning field just as firmly as it rejects
+			// effort/reasoningEffort/reasoningSummary. Measured against NVIDIA's
+			// z-ai/glm-5.2 on 2026-08-02:
+			//   "Unsupported parameter(s): reasoning" (after effort/
+			//   reasoningSummary had already been suppressed in an earlier fix).
+			// GLM models on non-routed providers now get no reasoning-shaped
+			// field at all; only providers in
+			// GLM_ROUTED_REASONING_SHAPE_PROVIDER_IDS (currently OpenRouter)
+			// get the routed reasoning.enabled/exclude shape.
+			name: "nvidia GLM effort -> no reasoning-shaped field leaks at all",
+			request: {
+				providerId: "nvidia",
+				modelId: "z-ai/glm-5.2",
+				reasoning: { enabled: true, effort: "medium" },
+			},
+			expect: [
+				{
+					bucket: "openaiCompatible",
+					lacks: ["thinking", "effort", "reasoningEffort", "reasoningSummary", "reasoning"],
+				},
+			],
+		},
+		{
 			name: "vercel-ai-gateway GLM thinking-enabled -> provider+alias buckets, no thinking leak",
 			request: {
 				providerId: "vercel-ai-gateway",
