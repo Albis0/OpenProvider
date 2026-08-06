@@ -19,7 +19,7 @@ Her rol **kendi sağlayıcısına** gidebiliyor ve **kendi failover zincirine** 
 
 **Zincir varsayılan olarak KAPALI.** Sebep aşağıda.
 
-5 commit, 5 yeni/değişen dosya:
+5 commit:
 
 | Commit | İş |
 |---|---|
@@ -27,6 +27,10 @@ Her rol **kendi sağlayıcısına** gidebiliyor ve **kendi failover zincirine** 
 | `e17ede96c` | Yapılandırılmış devir + zincir seçici |
 | `7d4486e4d` | Session orkestrasyonu + rol başına failover |
 | `5fa76f292` | Probe script |
+| `20c1dc655` | Bu rapor |
+
+Yeni dosyalar: `roles.ts`, `handoff.ts`, `chain.ts`, `probe-multi-agent.ts`.
+Değişenler: `config.ts`, `router.ts`, `session.ts`, `index.ts`, `package.json`.
 
 ---
 
