@@ -9,16 +9,36 @@
  * ```
  */
 export {
+	assessComplexity,
+	type ChainPlan,
+	type ComplexitySignal,
+	describeChain,
+	planChain,
+	type PlanChainOptions,
+} from "./chain";
+export {
 	CONFIG_FILENAME,
 	EMPTY_CONFIG,
+	EMPTY_ROLE_CONFIG,
 	loadConfig,
 	type LoadedConfig,
 	type ModeTarget,
 	parseConfig,
+	parseRoleConfig,
+	type RoleConfig,
+	type RoleTarget,
 	type RoutingConfig,
 	saveConfig,
 	suggestConfig,
 } from "./config";
+export {
+	type Handoff,
+	handoffFiles,
+	type HandoffStep,
+	parseHandoff,
+	renderHandoff,
+	renderReviewPrompt,
+} from "./handoff";
 export {
 	DEFAULT_MODE,
 	isMode,
@@ -28,6 +48,13 @@ export {
 	resolveMode,
 	suggestMode,
 } from "./modes";
+export {
+	CORE_ROLE,
+	isRole,
+	type Role,
+	ROLE_PROMPTS,
+	ROLES,
+} from "./roles";
 export {
 	NoProviderAvailableError,
 	type RouteDecision,
