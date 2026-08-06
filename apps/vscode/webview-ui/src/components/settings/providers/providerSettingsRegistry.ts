@@ -166,6 +166,83 @@ const FALLBACK_GENERIC_PROVIDER_NAMES = {
 	xiaomi: "Xiaomi",
 	"tencent-tokenhub": "Tencent TokenHub",
 	"zai-coding-plan": "Z.AI Coding Plan",
+	// Grup 5 provider audit (2026-08-01) — generic openai-compatible providers
+	// with no presentation override. Without a fallback name here, the
+	// settings form briefly renders the raw OpenAI-compatible custom form
+	// before the async provider-listing gRPC call resolves (initial state is
+	// an empty array), because isCustomProvider only clears once a live
+	// listing name is available. See providerSettingsRegistry.test.ts for the
+	// pattern this follows.
+	poe: "Poe",
+	"privatemode-ai": "Privatemode AI",
+	"qihang-ai": "QiHang",
+	"qiniu-ai": "Qiniu",
+	"regolo-ai": "Regolo AI",
+	"routing-run": "routing.run",
+	sakana: "Sakana AI",
+	sarvam: "Sarvam AI",
+	scaleway: "Scaleway",
+	siliconflow: "SiliconFlow",
+	"siliconflow-cn": "SiliconFlow (China)",
+	"snowflake-cortex": "Snowflake Cortex",
+	stackit: "STACKIT",
+	stepfun: "StepFun (China)",
+	"stepfun-ai": "StepFun (Global)",
+	"stepfun-ai-step-plan": "StepFun Step Plan (Global)",
+	"stepfun-step-plan": "StepFun Step Plan (China)",
+	subconscious: "Subconscious",
+	submodel: "submodel",
+	synthetic: "Synthetic",
+	"tencent-coding-plan": "Tencent Coding Plan (China)",
+	"tencent-token-plan": "Tencent Token Plan",
+	// Grup 6 provider audit (2026-08-02) — same reasoning as the grup 5 batch
+	// above: generic openai-compatible providers with no presentation override
+	// and no fallback name yet.
+	"the-grid-ai": "The Grid AI",
+	thinkingmachines: "Thinking Machines",
+	tinfoil: "Tinfoil",
+	trustedrouter: "TrustedRouter",
+	"umans-ai": "Umans AI",
+	"umans-ai-coding-plan": "Umans AI Coding Plan",
+	unorouter: "UnoRouter",
+	upstage: "Upstage",
+	vivgrid: "Vivgrid",
+	vultr: "Vultr",
+	"wafer.ai": "Wafer",
+	"xiaomi-token-plan-ams": "Xiaomi Token Plan (Europe)",
+	"xiaomi-token-plan-cn": "Xiaomi Token Plan (China)",
+	"xiaomi-token-plan-sgp": "Xiaomi Token Plan (Singapore)",
+	xpersona: "Xpersona",
+	zeldoc: "Zeldoc",
+	zenifra: "Zenifra",
+	zenmux: "ZenMux",
+	zhipuai: "Zhipu AI",
+	"zhipuai-coding-plan": "Zhipu AI Coding Plan",
+	// Grup 2 provider audit (2026-08-02) — same reasoning as the grup 5/6
+	// batches above: generic openai-compatible (or, for freemodel, anthropic
+	// family) providers with no presentation override and no fallback name yet.
+	"cloudferro-sherlock": "CloudFerro Sherlock",
+	"cloudflare-workers-ai": "Cloudflare Workers AI",
+	cortecs: "Cortecs",
+	crof: "CrofAI",
+	crossmodel: "CrossModel",
+	daoxe: "DaoXE",
+	databricks: "Databricks",
+	digitalocean: "DigitalOcean",
+	dinference: "DInference",
+	drun: "D.Run (China)",
+	ebcloud: "EBCloud",
+	empiriolabs: "EmpirioLabs AI",
+	evroc: "evroc",
+	fastrouter: "FastRouter",
+	freemodel: "FreeModel",
+	friendli: "Friendli",
+	frogbot: "FrogBot",
+	"github-copilot": "GitHub Copilot",
+	"github-models": "GitHub Models",
+	gmicloud: "GMI Cloud",
+	helicone: "Helicone",
+	"hpc-ai": "HPC-AI",
 } as const
 
 export function getFallbackGenericProviderSettings(providerId: string): GenericProviderSettingsConfig | undefined {

@@ -1,6 +1,15 @@
 import type { ExtensionMessage } from "@shared/ExtensionMessage"
 import { ResetStateRequest } from "@shared/proto/cline/state"
-import { CheckCheck, FlaskConical, Info, type LucideIcon, SlidersHorizontal, SquareTerminal, Wrench } from "lucide-react"
+import {
+	CheckCheck,
+	FlaskConical,
+	Info,
+	ListOrdered,
+	type LucideIcon,
+	SlidersHorizontal,
+	SquareTerminal,
+	Wrench,
+} from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useEvent } from "react-use"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -15,12 +24,13 @@ import ApiConfigurationSection from "./sections/ApiConfigurationSection"
 import DebugSection from "./sections/DebugSection"
 import FeatureSettingsSection from "./sections/FeatureSettingsSection"
 import GeneralSettingsSection from "./sections/GeneralSettingsSection"
+import ProviderPrioritySection from "./sections/ProviderPrioritySection"
 import TerminalSettingsSection from "./sections/TerminalSettingsSection"
 
 const IS_DEV = process.env.IS_DEV
 
 // Tab definitions
-type SettingsTabID = "api-config" | "features" | "terminal" | "general" | "about" | "debug"
+type SettingsTabID = "api-config" | "provider-priority" | "features" | "terminal" | "general" | "about" | "debug"
 interface SettingsTab {
 	id: SettingsTabID
 	name: string
@@ -37,6 +47,13 @@ const SETTINGS_TABS: SettingsTab[] = [
 		tooltipText: "API Configuration",
 		headerText: "API Configuration",
 		icon: SlidersHorizontal,
+	},
+	{
+		id: "provider-priority",
+		name: "Provider Priority",
+		tooltipText: "Provider Priority",
+		headerText: "Provider Priority",
+		icon: ListOrdered,
 	},
 	{
 		id: "features",
@@ -104,6 +121,7 @@ const SettingsView = ({ onDone, targetSection }: SettingsViewProps) => {
 	const TAB_CONTENT_MAP: Record<SettingsTabID, React.FC<any>> = useMemo(
 		() => ({
 			"api-config": ApiConfigurationSection,
+			"provider-priority": ProviderPrioritySection,
 			general: GeneralSettingsSection,
 			features: FeatureSettingsSection,
 			terminal: TerminalSettingsSection,

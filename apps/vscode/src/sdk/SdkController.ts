@@ -27,6 +27,7 @@ import type { Settings } from "@shared/storage/state-keys"
 import type { Mode } from "@shared/storage/types"
 import type { TelemetrySetting } from "@shared/TelemetrySetting"
 import type { ClineCheckpointRestore } from "@shared/WebviewMessage"
+import { normalizeProviderSwitchModel } from "@/core/controller/models/providerSwitchNormalization"
 import { parseMentions } from "@/core/mentions"
 import { ensureMcpServersDirectoryExists } from "@/core/storage/disk"
 import { StateManager } from "@/core/storage/StateManager"
@@ -36,7 +37,7 @@ import { VscodeTerminalManager } from "@/hosts/vscode/terminal/VscodeTerminalMan
 import { ExtensionRegistryInfo } from "@/registry"
 import { OcaAuthService } from "@/services/auth/oca/OcaAuthService"
 import { UrlContentFetcher } from "@/services/browser/UrlContentFetcher"
-import { ClineError } from "@/services/error/ClineError"
+import { ClineError, ClineErrorType } from "@/services/error/ClineError"
 import { McpHub } from "@/services/mcp/McpHub"
 import { telemetryService } from "@/services/telemetry"
 import type { ClineExtensionContext } from "@/shared/cline"
@@ -46,7 +47,9 @@ import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
 import { AuthService, LogoutReason } from "./auth-service"
-import { buildStartSessionInput, createHistoryItemFromSession } from "./cline-session-factory"
+import { buildStartSessionInput, createHistoryItemFromSession, resolveApiKey } from "./cline-session-factory"
+import { summarizeError } from "./failover/rate-limit"
+import { SdkFailoverCoordinator } from "./failover/sdk-failover-coordinator"
 import { MessageTranslatorState, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
@@ -168,6 +171,7 @@ export class Controller {
 	private mcpTools: SdkMcpCoordinator
 	private terminalExecutionMode: SdkTerminalExecutionModeCoordinator
 	private providerChanges: SdkProviderChangeCoordinator
+	private failover: SdkFailoverCoordinator
 	private followups: SdkFollowupCoordinator
 	private taskControl: SdkTaskControlCoordinator
 	private taskStart: SdkTaskStartCoordinator
@@ -359,6 +363,9 @@ export class Controller {
 			},
 			onSendStart: () => {
 				this.beginProviderFailureTelemetryTurn()
+				// Forget which providers were rate limited earlier: a fresh turn
+				// may well be minutes later, by which time a limit has reset.
+				this.failover.beginTurn()
 			},
 			// this.mode is assigned later in this constructor; the closure only
 			// runs at send time, long after construction completes.
@@ -401,6 +408,10 @@ export class Controller {
 						failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
 					})
 					this.emitClineBalanceError(errorMessage)
+				} else if (await this.tryFailoverOnRateLimit(error, errorMessage, providerId, sessionId)) {
+					// Switched providers and resumed the turn; the failover path
+					// already told the user what happened, so the error is not
+					// surfaced as a dead end.
 				} else {
 					this.captureProviderFailure({
 						sessionId,
@@ -496,6 +507,33 @@ export class Controller {
 			buildStartSessionInput,
 			postStateToWebview: () => this.postStateToWebview(),
 			rebuilds: this.sessionRebuilds,
+		})
+		this.failover = new SdkFailoverCoordinator({
+			getFailoverMode: () => this.stateManager.getGlobalSettingsKey("providerFailoverMode") ?? "ask",
+			getFailoverOrder: () => this.stateManager.getGlobalSettingsKey("providerFailoverOrder") ?? [],
+			getMode: () => (this.stateManager.getGlobalSettingsKey("mode") === "plan" ? "plan" : "act"),
+			getApiConfiguration: () => this.stateManager.getApiConfiguration(),
+			applyApiConfiguration: (next, previous) => {
+				this.stateManager.setApiConfiguration(next)
+				this.handleApiConfigurationChanged(previous, next)
+			},
+			// The same key resolution the session factory uses at startup, so a
+			// provider is only chosen if it would actually be able to run.
+			hasCredentials: (providerId, config) => !!resolveApiKey(providerId, config),
+			normalizeSwitch: (previous, next) => normalizeProviderSwitchModel(this.providerConfigStore, previous, next),
+			emitMessages: (messages) =>
+				this.messages.appendAndEmit(messages, {
+					type: "status",
+					payload: { sessionId: this.sessions.getActiveSession()?.sessionId ?? "", status: "running" },
+				}),
+			waitForPendingRebuilds: async () => {
+				await this.mode.waitForPendingRebuild()
+				await this.sessionRebuilds.waitUntilSettled()
+			},
+			// An empty prompt resumes the interrupted turn rather than adding a
+			// new user message — the same thing the Retry button does.
+			resumeTurn: () => this.askResponse(),
+			askQuestion: (question, options) => this.interactions.handleAskQuestion(question, options, undefined),
 		})
 		this.followups = new SdkFollowupCoordinator({
 			stateManager: this.stateManager,
@@ -905,6 +943,52 @@ export class Controller {
 	 */
 	onSessionEvent(listener: SessionEventListener): () => void {
 		return this.messages.onSessionEvent(listener)
+	}
+
+	/**
+	 * Rate-limit failover entry point.
+	 *
+	 * Returns true when the turn has been moved onto another provider and
+	 * resumed — the caller then skips the normal error surfacing, because the
+	 * task is still running.
+	 *
+	 * Returns false for every other case (not a rate limit, failover disabled,
+	 * nothing left to switch to, or the switch itself failed), leaving the
+	 * pre-existing error path untouched.
+	 */
+	private async tryFailoverOnRateLimit(
+		error: unknown,
+		errorMessage: string,
+		providerId: string | undefined,
+		sessionId?: string,
+	): Promise<boolean> {
+		const clineError = ClineError.transform(error, this.getTaskModelId(), providerId)
+		if (!clineError.isErrorType(ClineErrorType.RateLimit)) {
+			return false
+		}
+
+		try {
+			const outcome = await this.failover.handleRateLimit({
+				failedProviderId: providerId,
+				summary: summarizeError(errorMessage),
+			})
+			if (outcome.kind !== "switched") {
+				return false
+			}
+			this.captureProviderFailure({
+				sessionId,
+				error,
+				providerId,
+				errorType: PROVIDER_FAILURE_ERROR_TYPE.SEND_ERROR,
+				failurePhase: PROVIDER_FAILURE_PHASE.STREAMING,
+			})
+			return true
+		} catch (failoverError) {
+			// A failed switch must not swallow the original error: fall through
+			// and let the user see the rate limit they actually hit.
+			Logger.error("[SdkController] Provider failover failed:", failoverError)
+			return false
+		}
 	}
 
 	/**

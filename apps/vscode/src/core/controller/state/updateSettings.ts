@@ -1,4 +1,5 @@
 import { setCompactionStrategyGlobally } from "@cline/core"
+import type { ApiProvider } from "@shared/api"
 import { Empty } from "@shared/proto/cline/common"
 import { PlanActMode, McpDisplayMode as ProtoMcpDisplayMode, UpdateSettingsRequest } from "@shared/proto/cline/state"
 import { convertProtoToApiProvider } from "@shared/proto-conversions/models/api-configuration-conversion"
@@ -107,6 +108,20 @@ export async function updateSettings(controller: Controller, request: UpdateSett
 
 		if (request.preferredLanguage !== undefined) {
 			controller.stateManager.setGlobalState("preferredLanguage", request.preferredLanguage)
+		}
+
+		if (request.providerFailoverMode !== undefined && request.providerFailoverMode !== "") {
+			const mode = request.providerFailoverMode
+			if (mode === "ask" || mode === "auto" || mode === "stop") {
+				controller.stateManager.setGlobalState("providerFailoverMode", mode)
+			}
+		}
+
+		// `provider_failover_order` is a repeated field, so it always arrives as an
+		// array — an empty one could mean either "clear the list" or "not part of
+		// this patch". The companion flag says which.
+		if (request.providerFailoverOrderSet) {
+			controller.stateManager.setGlobalState("providerFailoverOrder", request.providerFailoverOrder as ApiProvider[])
 		}
 
 		// Update terminal timeout setting

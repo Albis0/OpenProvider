@@ -283,6 +283,13 @@ const USER_SETTINGS_FIELDS = {
 	subagentsEnabled: { default: false as boolean },
 	worktreesEnabled: { default: false as boolean },
 	preferredLanguage: { default: "English" as string },
+	// Provider Priority settings tab: user-defined failover order + mode.
+	// "stop" (not "off") intentionally matches apps/openprovider's SwitchPolicy
+	// type so the trigger logic added later needs no translation layer.
+	// An empty order means "user has not customized it"; the UI falls back to a
+	// built-in default list rather than treating it as "no failover".
+	providerFailoverMode: { default: "ask" as "ask" | "auto" | "stop" },
+	providerFailoverOrder: { default: [] as ApiProvider[] },
 	mode: { default: "act" as Mode },
 	focusChainSettings: { default: DEFAULT_FOCUS_CHAIN_SETTINGS as FocusChainSettings },
 	backgroundEditEnabled: { default: false as boolean },

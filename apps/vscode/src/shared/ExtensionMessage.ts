@@ -4,7 +4,7 @@ import { WorkspaceRoot } from "@shared/multi-root/types"
 import { RemoteConfigFields } from "@shared/storage/state-keys"
 import type { Environment } from "../config"
 import { AutoApprovalSettings } from "./AutoApprovalSettings"
-import { ApiConfiguration } from "./api"
+import { ApiConfiguration, ApiProvider } from "./api"
 import { BrowserSettings } from "./BrowserSettings"
 import { ClineFeatureSetting } from "./ClineFeatureSetting"
 import { BannerCardData } from "./cline/banner"
@@ -44,6 +44,8 @@ export interface ExtensionState {
 	browserSettings: BrowserSettings
 	remoteBrowserHost?: string
 	preferredLanguage?: string
+	providerFailoverMode?: "ask" | "auto" | "stop"
+	providerFailoverOrder?: ApiProvider[]
 	mode: Mode
 	clineMessages: ClineMessage[]
 	checkpointRestoreInput?: {

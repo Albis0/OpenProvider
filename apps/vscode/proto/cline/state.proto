@@ -292,6 +292,8 @@ message Settings {
   optional OpenRouterModelInfo plan_mode_cline_pass_model_info = 184;
   optional string act_mode_cline_pass_model_id = 185;
   optional OpenRouterModelInfo act_mode_cline_pass_model_info = 186;
+  optional string provider_failover_mode = 187;
+  optional string provider_failover_order = 188;
 }
 
 message State {
@@ -434,6 +436,13 @@ message UpdateSettingsRequest {
   optional bool worktrees_enabled = 40;
   optional bool show_feature_tips = 42;
   optional string compaction_strategy = 44;
+  // Provider Priority tab: "ask" | "auto" | "stop".
+  optional string provider_failover_mode = 45;
+  // Ordered provider ids. Repeated fields cannot be `optional` in proto3, so an
+  // empty list is indistinguishable from "not sent"; the paired
+  // provider_failover_order_set flag disambiguates a deliberate clear.
+  repeated string provider_failover_order = 46;
+  optional bool provider_failover_order_set = 47;
 }
 
 message UpdateTerminalConnectionTimeoutRequest {

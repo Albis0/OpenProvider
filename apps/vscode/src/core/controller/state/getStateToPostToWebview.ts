@@ -66,6 +66,8 @@ export async function getStateToPostToWebview(controller: {
 
 	const mcpResponsesCollapsed = stateManager.getGlobalStateKey("mcpResponsesCollapsed")
 	const favoritedModelIds = stateManager.getGlobalStateKey("favoritedModelIds")
+	const providerFailoverMode = stateManager.getGlobalSettingsKey("providerFailoverMode")
+	const providerFailoverOrder = stateManager.getGlobalSettingsKey("providerFailoverOrder")
 	const lastDismissedInfoBannerVersion = stateManager.getGlobalStateKey("lastDismissedInfoBannerVersion") || 0
 	const lastDismissedModelBannerVersion = stateManager.getGlobalStateKey("lastDismissedModelBannerVersion") || 0
 	const lastDismissedCliBannerVersion = stateManager.getGlobalStateKey("lastDismissedCliBannerVersion") || 0
@@ -163,6 +165,8 @@ export async function getStateToPostToWebview(controller: {
 		taskHistory: processedTaskHistory,
 		shouldShowAnnouncement,
 		favoritedModelIds,
+		providerFailoverMode,
+		providerFailoverOrder,
 		backgroundCommandRunning: controller.backgroundCommandRunning ?? false,
 		backgroundCommandTaskId: controller.backgroundCommandTaskId,
 		foregroundCommandRunning: controller.foregroundCommandRunning ?? false,
