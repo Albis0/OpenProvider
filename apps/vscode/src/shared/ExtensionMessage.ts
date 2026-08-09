@@ -240,6 +240,12 @@ export type ClineSay =
 	| "mcp_server_request_started"
 	| "mcp_server_response"
 	| "mcp_notification"
+	// A provider hit its rate limit and the failover engine moved the task to
+	// another one. Its own say type rather than plain "text" because it is the
+	// one event in a run that silently changes which model is answering — read
+	// as ordinary assistant prose, it goes unnoticed until the output style
+	// shifts and nobody knows why.
+	| "provider_failover"
 	| "use_mcp_server"
 	| "diff_error"
 	| "deleted_api_reqs"

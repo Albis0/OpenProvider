@@ -148,12 +148,20 @@ export class SdkFailoverCoordinator {
 
 		Logger.log(`[Failover] ${attempt.failedProviderId ?? "unknown"} rate limited; switching to ${provider}`)
 
+		// The banner needs the two provider ids as data, not buried in a
+		// sentence, so the row can show the hand-off as `from → to` at a glance.
+		// JSON rather than a formatted string because this is the one message
+		// whose meaning must survive being skimmed.
 		this.options.emitMessages([
 			{
 				ts: Date.now(),
 				type: "say",
-				say: "text",
-				text: `${attempt.failedProviderId ?? "The provider"} hit its rate limit. Switched to ${provider} and retrying.\n\n${attempt.summary}`,
+				say: "provider_failover",
+				text: JSON.stringify({
+					from: attempt.failedProviderId ?? "The provider",
+					to: provider,
+					summary: attempt.summary,
+				}),
 				partial: false,
 			},
 		])

@@ -61,8 +61,17 @@ describe("SdkFailoverCoordinator", () => {
 		await coordinator.handleRateLimit(attempt())
 
 		const [messages] = emitMessages.mock.calls[0]
-		expect(messages[0].text).toContain("groq")
-		expect(messages[0].text).toContain("rate limit")
+		// Its own say type, so the chat row can render it as a banner rather
+		// than as ordinary assistant prose the user scrolls past.
+		expect(messages[0].say).toBe("provider_failover")
+
+		// Both provider ids travel as data. The row shows them as `from → to`,
+		// which only works if neither is buried in a sentence.
+		expect(JSON.parse(messages[0].text)).toEqual({
+			from: "nvidia",
+			to: "groq",
+			summary: "429 Too Many Requests",
+		})
 	})
 
 	it("does nothing in stop mode", async () => {

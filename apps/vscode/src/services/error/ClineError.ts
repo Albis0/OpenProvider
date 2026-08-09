@@ -50,7 +50,22 @@ interface ErrorDetails {
 	details?: any
 }
 
-const RATE_LIMIT_PATTERNS = [/status code 429/i, /rate limit/i, /too many requests/i, /quota exceeded/i, /resource exhausted/i]
+const RATE_LIMIT_PATTERNS = [
+	/status code 429/i,
+	/rate limit/i,
+	/too many requests/i,
+	/quota exceeded/i,
+	// Written both ways in the wild: gRPC status names arrive camel-cased
+	// ("ResourceExhausted"), REST bodies spell it out. Measured against NVIDIA
+	// on 2026-08-08, which returns the camel-cased form with no 429 and no
+	// "rate limit" wording anywhere — the old space-only pattern missed it and
+	// no failover fired.
+	/resource[\s_-]?exhausted/i,
+	// NVIDIA's actual wording: "Worker local total request limit reached
+	// (32/32)". Says nothing about rates or quotas, so it needs its own entry.
+	/request limit reached/i,
+	/limit reached \(\d+\/\d+\)/i,
+]
 
 export class ClineError extends Error {
 	readonly title = "ClineError"

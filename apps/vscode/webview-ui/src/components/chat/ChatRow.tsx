@@ -850,6 +850,47 @@ export const ChatRowContent = memo(
 								</div>
 							</div>
 						)
+					case "provider_failover": {
+						// The provider changed mid-task. Loud on purpose: from here on a
+						// different model is answering, and if that goes unnoticed the
+						// shift in output style looks like the model degrading for no
+						// reason. Full-width bar, warning colour and an explicit
+						// `from → to` so it cannot be mistaken for assistant prose.
+						let from = ""
+						let to = ""
+						let summary = ""
+						try {
+							const parsed = JSON.parse(message.text ?? "{}")
+							from = String(parsed.from ?? "")
+							to = String(parsed.to ?? "")
+							summary = String(parsed.summary ?? "")
+						} catch {
+							// Older messages stored a plain sentence. Showing it beats
+							// dropping the one notice that says the model changed.
+							summary = message.text ?? ""
+						}
+						return (
+							<div className="my-2 rounded-sm border-l-2 border-warning bg-quote px-3 py-2.5">
+								<div className="flex items-center gap-2">
+									<TriangleAlertIcon className="size-3 shrink-0 text-warning" />
+									<span className="text-base font-semibold text-foreground">Rate limit — provider switched</span>
+								</div>
+								{to && (
+									<div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-base">
+										<span className="rounded-sm bg-badge-background px-1.5 py-0.5 font-mono text-badge-foreground line-through opacity-70">
+											{from}
+										</span>
+										<span className="text-descriptionForeground">→</span>
+										<span className="rounded-sm bg-badge-background px-1.5 py-0.5 font-mono font-semibold text-badge-foreground">
+											{to}
+										</span>
+										<span className="text-descriptionForeground">now answering</span>
+									</div>
+								)}
+								{summary && <div className="mt-1.5 break-words pl-5 text-sm text-descriptionForeground">{summary}</div>}
+							</div>
+						)
+					}
 					case "text": {
 						return (
 							<WithCopyButton
