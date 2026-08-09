@@ -2,7 +2,7 @@ import type { AgentEvent, CoreSessionEvent } from "@cline/core"
 import { refreshClineRecommendedModels } from "@/core/controller/models/refreshClineRecommendedModels"
 import type { StateManager } from "@/core/storage/StateManager"
 import { CLINE_RECOMMENDED_MODELS_FALLBACK } from "@/shared/cline/recommended-models"
-import type { ClineApiReqInfo, TurnPhase } from "@/shared/ExtensionMessage"
+import type { ClineApiReqInfo, ClineMessage, TurnPhase } from "@/shared/ExtensionMessage"
 import { Logger } from "@/shared/services/Logger"
 import { isClineManagedProvider } from "@/shared/utils/cline"
 import type { MessageTranslatorState, TranslationResult } from "./message-translator"
@@ -18,6 +18,36 @@ function normalizeModelId(modelId: string): string {
 }
 
 type AgentFailureTelemetry = Pick<ProviderFailureTelemetry, "sessionId" | "error" | "errorType"> | undefined
+
+/**
+ * True for a message that exists only to show `failureText` as a dead end.
+ *
+ * A single agent error fans out into three messages — the raw `say:"error"`,
+ * the `api_req_started` row carrying `streamingFailedMessage`, and the
+ * `ask:"api_req_failed"` retry prompt. When failover has already moved the
+ * task onto another provider all three are stale, and leaving any of them
+ * shows a failed request for a turn that is still running.
+ *
+ * Matched against the failure text rather than by message type alone, so an
+ * unrelated tool error in the same batch is still the user's to see.
+ */
+function isFailureSurface(message: ClineMessage, failureText: string | undefined): boolean {
+	if (!failureText) {
+		return false
+	}
+	if (message.type === "say" && message.say === "error") {
+		return message.text === failureText
+	}
+	if (message.type === "ask" && message.ask === "api_req_failed") {
+		return message.text?.includes(failureText) ?? false
+	}
+	if (message.type === "say" && message.say === "api_req_started") {
+		// Only the row that carries this failure; a normal request row for the
+		// same turn must survive, or the transcript loses its request history.
+		return message.text?.includes("streamingFailedMessage") === true && message.text.includes(failureText)
+	}
+	return false
+}
 
 export interface SdkSessionEventCoordinatorOptions {
 	messageTranslatorState: MessageTranslatorState
@@ -98,12 +128,17 @@ export class SdkSessionEventCoordinator {
 			const switched = await this.handleProviderFailure(agentFailure.error, event.payload.sessionId)
 			if (switched) {
 				// The task is alive on another provider, so the dead-end error is
-				// dropped and the turn is not closed. Only the message carrying
-				// this exact failure goes: an unrelated tool error in the same
-				// batch is still the user's to see.
-				result.messages = result.messages.filter(
-					(message) => !(message.type === "say" && message.say === "error" && message.text === agentFailure.error),
-				)
+				// dropped and the turn is not closed.
+				//
+				// An agent error is translated into three separate messages, not
+				// one: `say:"error"` from the tool path, `say:"api_req_started"`
+				// carrying `streamingFailedMessage` (the red text), and
+				// `ask:"api_req_failed"` (the Retry prompt). Filtering only the
+				// first — as this did at first — left the user looking at a failed
+				// request and a Retry button for a turn that had already moved on
+				// and was still running. Measured on Gemini, 2026-08-09.
+				const failureText = typeof agentFailure.error === "string" ? agentFailure.error : undefined
+				result.messages = result.messages.filter((message) => !isFailureSurface(message, failureText))
 				result.turnComplete = false
 			}
 		}

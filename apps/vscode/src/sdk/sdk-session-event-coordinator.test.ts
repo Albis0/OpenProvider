@@ -329,6 +329,105 @@ describe("SdkSessionEventCoordinator", () => {
 			failurePhase: PROVIDER_FAILURE_PHASE.STREAMING,
 		})
 	})
+
+	describe("provider failover", () => {
+		const RATE_LIMIT = "You exceeded your current quota. Please retry in 44.9s."
+
+		/** The three messages one agent error fans out into. */
+		const failureMessages = (error: string): ClineMessage[] => [
+			{ ts: 1, type: "say", say: "error", text: error, partial: false },
+			{
+				ts: 2,
+				type: "say",
+				say: "api_req_started",
+				text: JSON.stringify({ streamingFailedMessage: error }),
+				partial: false,
+			},
+			{ ts: 3, type: "ask", ask: "api_req_failed", text: error, partial: false },
+		]
+
+		const errorEvent = {
+			type: "agent_event",
+			payload: { sessionId: "session-123", event: { type: "error", error: RATE_LIMIT } },
+		} as unknown as CoreSessionEvent
+
+		it("offers the failure to failover", async () => {
+			const handleProviderFailure = vi.fn(async () => false)
+			const { coordinator } = makeCoordinator({ handleProviderFailure })
+
+			await coordinator.handleSessionEvent(errorEvent)
+
+			expect(handleProviderFailure).toHaveBeenCalledWith({ error: RATE_LIMIT, sessionId: "session-123" })
+		})
+
+		it("clears every surface of the failure once the task has moved on", async () => {
+			// All three go, or the user is left looking at a failed request and a
+			// Retry button for a turn that is still running. Filtering only
+			// say:"error" is exactly the bug this covers, seen on Gemini.
+			const { coordinator, options } = makeCoordinator({
+				handleProviderFailure: async () => true,
+				translation: { messages: failureMessages(RATE_LIMIT), sessionEnded: false, turnComplete: true },
+			})
+
+			await coordinator.handleSessionEvent(errorEvent)
+
+			expect(options.messages.appendAndEmit).not.toHaveBeenCalled()
+		})
+
+		it("keeps the turn open so the retry on the new provider can run", async () => {
+			const { coordinator, options } = makeCoordinator({
+				handleProviderFailure: async () => true,
+				translation: { messages: failureMessages(RATE_LIMIT), sessionEnded: false, turnComplete: true },
+			})
+
+			await coordinator.handleSessionEvent(errorEvent)
+
+			expect(options.sessions.setRunning).not.toHaveBeenCalledWith(false)
+		})
+
+		it("leaves an unrelated message in the same batch alone", async () => {
+			const unrelated: ClineMessage = { ts: 4, type: "say", say: "text", text: "still useful", partial: false }
+			const { coordinator, options } = makeCoordinator({
+				handleProviderFailure: async () => true,
+				translation: {
+					messages: [...failureMessages(RATE_LIMIT), unrelated],
+					sessionEnded: false,
+					turnComplete: true,
+				},
+			})
+
+			await coordinator.handleSessionEvent(errorEvent)
+
+			expect(options.messages.appendAndEmit).toHaveBeenCalledWith([unrelated], expect.anything())
+		})
+
+		it("shows the error untouched when failover did not act", async () => {
+			const messages = failureMessages(RATE_LIMIT)
+			const { coordinator, options } = makeCoordinator({
+				handleProviderFailure: async () => false,
+				translation: { messages, sessionEnded: false, turnComplete: true },
+			})
+
+			await coordinator.handleSessionEvent(errorEvent)
+
+			expect(options.messages.appendAndEmit).toHaveBeenCalledWith(messages, expect.anything())
+		})
+
+		it("surfaces the error when failover throws", async () => {
+			// A failover that blows up must not cost the user both the error and
+			// the turn — that is strictly worse than the rate limit it started on.
+			const messages = failureMessages(RATE_LIMIT)
+			const { coordinator, options } = makeCoordinator({
+				handleProviderFailure: async () => {
+					throw new Error("switch exploded")
+				},
+				translation: { messages, sessionEnded: false, turnComplete: true },
+			})
+
+			await expect(coordinator.handleSessionEvent(errorEvent)).resolves.not.toThrow()
+			expect(options.messages.appendAndEmit).toHaveBeenCalledWith(messages, expect.anything())
+		})
+	})
 })
 
 function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
@@ -359,6 +458,7 @@ function makeCoordinator(input: Partial<MakeCoordinatorInput> = {}) {
 		beginProviderFailureTelemetryTurn: vi.fn(),
 		translateSessionEvent: vi.fn(() => input.translation ?? { messages: [], sessionEnded: false, turnComplete: false }),
 		isClineFreeModel: input.isClineFreeModel,
+		handleProviderFailure: input.handleProviderFailure,
 	} as unknown as SdkSessionEventCoordinatorOptions & {
 		sessions: SdkSessionEventCoordinatorOptions["sessions"] & {
 			getActiveSession: ReturnType<typeof vi.fn>
@@ -394,6 +494,7 @@ interface MakeCoordinatorInput {
 	activeSession: ReturnType<typeof makeActiveSession>
 	task: { taskId: string }
 	isClineFreeModel: () => Promise<boolean>
+	handleProviderFailure: (failure: { error: unknown; sessionId: string }) => Promise<boolean>
 	translation: {
 		messages: ClineMessage[]
 		sessionEnded: boolean
