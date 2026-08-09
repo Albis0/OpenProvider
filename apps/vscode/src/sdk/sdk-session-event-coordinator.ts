@@ -37,6 +37,24 @@ export interface SdkSessionEventCoordinatorOptions {
 	setTurnPhase?: (phase: TurnPhase, anchorTs?: number) => void
 	captureProviderApiError?: (event: ProviderFailureTelemetry) => void
 	beginProviderFailureTelemetryTurn?: () => void
+	/**
+	 * Offered every agent-level failure, so provider failover can act on it.
+	 *
+	 * This exists because the SDK does not throw provider errors — it publishes
+	 * them as `agent_event` with `type: "error"` and the send promise resolves
+	 * normally. Failover used to hang off `onSendError`, which only runs on a
+	 * rejection, so for the exact class of error it was written for it was
+	 * never called at all. Measured against NVIDIA on 2026-08-08: a real rate
+	 * limit produced no switch and no notice.
+	 *
+	 * Hooked here rather than in a new listener because `getAgentFailureTelemetry`
+	 * below already detects this event and extracts the message — the failure
+	 * was always being seen, just only reported to telemetry.
+	 *
+	 * Returns true when the task was moved onto another provider, in which case
+	 * the error is not surfaced: the turn is still alive.
+	 */
+	handleProviderFailure?: (failure: { error: unknown; sessionId: string }) => Promise<boolean>
 }
 
 export class SdkSessionEventCoordinator {
@@ -72,6 +90,22 @@ export class SdkSessionEventCoordinator {
 				errorType: agentFailure.errorType,
 				failurePhase: PROVIDER_FAILURE_PHASE.STREAMING,
 			})
+
+			// Awaited on purpose: whether the error is shown depends on the
+			// answer, and in "ask" mode this blocks on the user. That is safe
+			// here — the reply arrives over the webview's gRPC channel, not
+			// through this event stream, so it cannot deadlock on itself.
+			const switched = await this.handleProviderFailure(agentFailure.error, event.payload.sessionId)
+			if (switched) {
+				// The task is alive on another provider, so the dead-end error is
+				// dropped and the turn is not closed. Only the message carrying
+				// this exact failure goes: an unrelated tool error in the same
+				// batch is still the user's to see.
+				result.messages = result.messages.filter(
+					(message) => !(message.type === "say" && message.say === "error" && message.text === agentFailure.error),
+				)
+				result.turnComplete = false
+			}
 		}
 		if (event.type === "pending_prompt_submitted") {
 			this.options.beginProviderFailureTelemetryTurn?.()
@@ -143,6 +177,25 @@ export class SdkSessionEventCoordinator {
 			this.options.postStateToWebview().catch((err) => {
 				Logger.error("[SdkController] Failed to post state after event:", err)
 			})
+		}
+	}
+
+	/**
+	 * Runs failover for an agent failure, swallowing its own errors.
+	 *
+	 * A failover that throws must never take down event processing: the user
+	 * would lose the error message *and* the turn, which is strictly worse than
+	 * the rate limit that started it.
+	 */
+	private async handleProviderFailure(error: unknown, sessionId: string): Promise<boolean> {
+		if (!this.options.handleProviderFailure) {
+			return false
+		}
+		try {
+			return await this.options.handleProviderFailure({ error, sessionId })
+		} catch (failoverError) {
+			Logger.error("[SdkController] Provider failover threw; surfacing the original error:", failoverError)
+			return false
 		}
 	}
 

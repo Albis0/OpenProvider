@@ -869,13 +869,20 @@ export const ChatRowContent = memo(
 							// dropping the one notice that says the model changed.
 							summary = message.text ?? ""
 						}
+						// `to` empty means failover looked at this failure and chose not
+						// to act. That case is shown too: a silent no-op is
+						// indistinguishable from a broken engine, which is how a dead
+						// code path in this very feature survived unnoticed.
+						const switched = to.length > 0
 						return (
 							<div className="my-2 rounded-sm border-l-2 border-warning bg-quote px-3 py-2.5">
 								<div className="flex items-center gap-2">
 									<TriangleAlertIcon className="size-3 shrink-0 text-warning" />
-									<span className="text-base font-semibold text-foreground">Rate limit — provider switched</span>
+									<span className="text-base font-semibold text-foreground">
+										{switched ? "Rate limit — provider switched" : "Rate limit — no switch made"}
+									</span>
 								</div>
-								{to && (
+								{switched && (
 									<div className="mt-1.5 flex flex-wrap items-center gap-1.5 pl-5 text-base">
 										<span className="rounded-sm bg-badge-background px-1.5 py-0.5 font-mono text-badge-foreground line-through opacity-70">
 											{from}

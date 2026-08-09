@@ -48,7 +48,7 @@ import { isClineManagedProvider } from "@/shared/utils/cline"
 import { arePathsEqual, getDesktopDir } from "@/utils/path"
 import { AuthService, LogoutReason } from "./auth-service"
 import { buildStartSessionInput, createHistoryItemFromSession, resolveApiKey } from "./cline-session-factory"
-import { summarizeError } from "./failover/rate-limit"
+import { classifyFailure } from "./failover/failure-classifier"
 import { SdkFailoverCoordinator } from "./failover/sdk-failover-coordinator"
 import { MessageTranslatorState, reshapeErrorForWebview } from "./message-translator"
 import { createProviderCatalog } from "./model-catalog/catalog"
@@ -408,7 +408,7 @@ export class Controller {
 						failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
 					})
 					this.emitClineBalanceError(errorMessage)
-				} else if (await this.tryFailoverOnRateLimit(error, errorMessage, providerId, sessionId)) {
+				} else if (await this.tryFailoverOnProviderFailure(error, providerId, sessionId)) {
 					// Switched providers and resumed the turn; the failover path
 					// already told the user what happened, so the error is not
 					// surfaced as a dead end.
@@ -625,6 +625,10 @@ export class Controller {
 			setTurnPhase: (phase, anchorTs) => this.turnStateTracker.set(phase, anchorTs),
 			captureProviderApiError: (event) => this.captureProviderFailure(event),
 			beginProviderFailureTelemetryTurn: () => this.beginProviderFailureTelemetryTurn(),
+			// The path that actually fires for provider errors. `onSendError`
+			// below covers the rarer case where the send itself rejects.
+			handleProviderFailure: ({ error, sessionId }) =>
+				this.tryFailoverOnProviderFailure(error, this.getSessionProviderId(sessionId), sessionId),
 		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder
@@ -946,31 +950,48 @@ export class Controller {
 	}
 
 	/**
-	 * Rate-limit failover entry point.
+	 * The single entry point for provider failover.
+	 *
+	 * Both error paths lead here: the `agent_event` error stream (which is how
+	 * the SDK reports provider failures) and `onSendError` (which only fires
+	 * when the send itself rejects). Keeping one entry means the ask/auto/stop
+	 * policy and the loop guards cannot disagree between paths.
 	 *
 	 * Returns true when the turn has been moved onto another provider and
 	 * resumed — the caller then skips the normal error surfacing, because the
 	 * task is still running.
 	 *
-	 * Returns false for every other case (not a rate limit, failover disabled,
+	 * Returns false for every other case (not worth failing over, disabled,
 	 * nothing left to switch to, or the switch itself failed), leaving the
 	 * pre-existing error path untouched.
 	 */
-	private async tryFailoverOnRateLimit(
+	private async tryFailoverOnProviderFailure(
 		error: unknown,
-		errorMessage: string,
 		providerId: string | undefined,
 		sessionId?: string,
 	): Promise<boolean> {
-		const clineError = ClineError.transform(error, this.getTaskModelId(), providerId)
-		if (!clineError.isErrorType(ClineErrorType.RateLimit)) {
+		// Classification is layered rather than a regex list: NVIDIA's real rate
+		// limit ("ResourceExhausted: Worker local total request limit reached
+		// (32/32)") carries no 429 and no "rate limit" wording, and the old
+		// single-list check missed it silently. See failure-classifier.ts.
+		const classification = classifyFailure({
+			error,
+			providerId,
+			modelId: this.getTaskModelId(),
+			priorFailuresThisTurn: this.failover.failureCountFor(providerId),
+		})
+		this.failover.recordFailure(providerId)
+
+		if (!classification.shouldFailover) {
 			return false
 		}
 
 		try {
 			const outcome = await this.failover.handleRateLimit({
 				failedProviderId: providerId,
-				summary: summarizeError(errorMessage),
+				summary: classification.summary,
+				kind: classification.kind,
+				retryAfterMs: classification.retryAfterMs,
 			})
 			if (outcome.kind !== "switched") {
 				return false

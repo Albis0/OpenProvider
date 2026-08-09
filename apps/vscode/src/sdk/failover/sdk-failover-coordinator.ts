@@ -10,6 +10,7 @@ import type { ApiConfiguration, ApiProvider } from "@shared/api"
 import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { Mode } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
+import { describeFailureKind, type FailureKind } from "./failure-classifier"
 import { buildProviderSwitchPatch, type FailoverMode, selectNextProvider } from "./provider-failover"
 
 export interface SdkFailoverCoordinatorOptions {
@@ -43,6 +44,10 @@ export interface FailoverAttempt {
 	failedProviderId: string | undefined
 	/** The provider's message, already summarized to one line. */
 	summary: string
+	/** What the classifier decided this failure was. */
+	kind?: FailureKind
+	/** How long the provider asked us to wait, when it said. */
+	retryAfterMs?: number
 }
 
 export type FailoverOutcome =
@@ -73,6 +78,15 @@ export class SdkFailoverCoordinator {
 	 */
 	private isRetrying = false
 
+	/**
+	 * Failures per provider during this turn, whatever the cause.
+	 *
+	 * Feeds the classifier's repetition layer: an error nobody recognises is
+	 * not worth switching over the first time, but is the second. Without this
+	 * count a provider with novel wording could fail forever in place.
+	 */
+	private readonly failureCounts = new Map<string, number>()
+
 	constructor(private readonly options: SdkFailoverCoordinatorOptions) {}
 
 	/** Called at the start of each send so a new turn starts with a clean slate. */
@@ -81,6 +95,19 @@ export class SdkFailoverCoordinator {
 			return
 		}
 		this.exhausted.clear()
+		this.failureCounts.clear()
+	}
+
+	/** How many times this provider has already failed this turn. */
+	failureCountFor(providerId: string | undefined): number {
+		return providerId ? (this.failureCounts.get(providerId) ?? 0) : 0
+	}
+
+	/** Records a failure for the repetition layer. Call once per failure. */
+	recordFailure(providerId: string | undefined): void {
+		if (providerId) {
+			this.failureCounts.set(providerId, this.failureCountFor(providerId) + 1)
+		}
 	}
 
 	/**
@@ -93,6 +120,9 @@ export class SdkFailoverCoordinator {
 	async handleRateLimit(attempt: FailoverAttempt): Promise<FailoverOutcome> {
 		const mode = this.options.getFailoverMode()
 		if (mode === "stop") {
+			// Not announced: the user set this deliberately, and repeating their
+			// own setting back at them on every error is noise.
+			Logger.log("[Failover] skipped — mode is 'stop'")
 			return { kind: "disabled" }
 		}
 
@@ -109,6 +139,16 @@ export class SdkFailoverCoordinator {
 		})
 
 		if (!next) {
+			// Said out loud on purpose. A silent no-op here is indistinguishable
+			// from a broken failover engine — which is exactly how a dead code
+			// path went unnoticed until someone read the source. The user needs
+			// to know the difference between "nothing to switch to" and "the
+			// feature is not working".
+			this.announce(
+				`${attempt.failedProviderId ?? "The provider"} ${describeFailureKind(attempt.kind ?? "rate-limit")}, ` +
+					"but no other provider with an API key is available to switch to. " +
+					"Add a key in Settings → Provider Priority to enable failover.",
+			)
 			return { kind: "exhausted" }
 		}
 
@@ -130,13 +170,32 @@ export class SdkFailoverCoordinator {
 		const from = attempt.failedProviderId ?? "The provider"
 
 		const answer = await this.options.askQuestion(
-			`${from} hit its rate limit.\n\n${attempt.summary}\n\nSwitch to ${provider} and continue?`,
+			`${from} ${describeFailureKind(attempt.kind ?? "rate-limit")}.\n\n${attempt.summary}\n\nSwitch to ${provider} and continue?`,
 			[switchAnswer, STAY_ANSWER],
 		)
 
 		// Anything other than an explicit refusal proceeds: the user was asked
 		// mid-task and a typed reply like "yes go ahead" should not read as no.
 		return answer.trim() !== STAY_ANSWER
+	}
+
+	/**
+	 * Tells the user why failover did not act.
+	 *
+	 * Uses the same banner as a successful switch, with no `to` provider, so the
+	 * two outcomes read as one story rather than two unrelated features.
+	 */
+	private announce(reason: string): void {
+		Logger.log(`[Failover] ${reason}`)
+		this.options.emitMessages([
+			{
+				ts: Date.now(),
+				type: "say",
+				say: "provider_failover",
+				text: JSON.stringify({ from: "", to: "", summary: reason }),
+				partial: false,
+			},
+		])
 	}
 
 	private async switchTo(provider: ApiProvider, attempt: FailoverAttempt): Promise<void> {
@@ -146,7 +205,9 @@ export class SdkFailoverCoordinator {
 		// it the session would restart pointing at the old provider's model.
 		const next = this.options.normalizeSwitch(previous, { ...previous, ...patch })
 
-		Logger.log(`[Failover] ${attempt.failedProviderId ?? "unknown"} rate limited; switching to ${provider}`)
+		Logger.log(
+			`[Failover] ${attempt.failedProviderId ?? "unknown"} ${describeFailureKind(attempt.kind ?? "rate-limit")}; switching to ${provider}`,
+		)
 
 		// The banner needs the two provider ids as data, not buried in a
 		// sentence, so the row can show the hand-off as `from → to` at a glance.
