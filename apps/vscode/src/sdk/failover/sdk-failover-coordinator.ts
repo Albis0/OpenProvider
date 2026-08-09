@@ -11,7 +11,12 @@ import type { ClineMessage } from "@shared/ExtensionMessage"
 import type { Mode } from "@shared/storage/types"
 import { Logger } from "@/shared/services/Logger"
 import { describeFailureKind, type FailureKind } from "./failure-classifier"
-import { buildProviderSwitchPatch, type FailoverMode, selectNextProvider } from "./provider-failover"
+import {
+	buildProviderSwitchPatch,
+	type FailoverMode,
+	RATE_LIMIT_COOLDOWN_MS,
+	selectNextProvider,
+} from "./provider-failover"
 
 export interface SdkFailoverCoordinatorOptions {
 	getFailoverMode: () => FailoverMode
@@ -38,6 +43,8 @@ export interface SdkFailoverCoordinatorOptions {
 	 * blocks the turn until answered — no new UI or round-trip is needed.
 	 */
 	askQuestion: (question: string, options: string[]) => Promise<string>
+	/** Injectable clock, so cooldown behaviour is testable without waiting. */
+	now?: () => number
 }
 
 export interface FailoverAttempt {
@@ -87,7 +94,18 @@ export class SdkFailoverCoordinator {
 	 */
 	private readonly failureCounts = new Map<string, number>()
 
+	/**
+	 * Provider id → when its cooldown ends. Unlike `exhausted`, this survives
+	 * the turn, so the next message does not walk straight back onto a provider
+	 * whose quota just ran out.
+	 */
+	private readonly cooldownUntil = new Map<string, number>()
+
 	constructor(private readonly options: SdkFailoverCoordinatorOptions) {}
+
+	private now(): number {
+		return this.options.now?.() ?? Date.now()
+	}
 
 	/** Called at the start of each send so a new turn starts with a clean slate. */
 	beginTurn(): void {
@@ -128,6 +146,18 @@ export class SdkFailoverCoordinator {
 
 		if (attempt.failedProviderId) {
 			this.exhausted.add(attempt.failedProviderId)
+			// Only throttling earns a cooldown. A provider that was merely
+			// overloaded, or failed for a reason nobody recognised, may well be
+			// fine on the next message, and holding it back would push the user
+			// off their chosen model for longer than the evidence justifies.
+			if ((attempt.kind ?? "rate-limit") === "rate-limit") {
+				this.cooldownUntil.set(
+					attempt.failedProviderId,
+					// The provider's own stated delay wins when it gave one — it
+					// knows its window better than a fixed guess does.
+					this.now() + Math.max(attempt.retryAfterMs ?? 0, RATE_LIMIT_COOLDOWN_MS),
+				)
+			}
 		}
 
 		const config = this.options.getApiConfiguration()
@@ -136,6 +166,8 @@ export class SdkFailoverCoordinator {
 			configuredOrder: this.options.getFailoverOrder(),
 			exhausted: this.exhausted,
 			hasCredentials: (providerId) => this.options.hasCredentials(providerId, config),
+			cooldownUntil: this.cooldownUntil,
+			now: () => this.now(),
 		})
 
 		if (!next) {

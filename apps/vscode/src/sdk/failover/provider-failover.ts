@@ -27,6 +27,17 @@ export type FailoverMode = "ask" | "auto" | "stop"
  */
 export const DEFAULT_FAILOVER_ORDER: ApiProvider[] = ["gemini", "cerebras", "groq", "openrouter", "nvidia"]
 
+/**
+ * How long a rate-limited provider is passed over on later turns.
+ *
+ * The `exhausted` set only lives for one turn, so without this the very next
+ * message walks straight back onto the provider whose quota just ran out and
+ * burns another failure to learn what we already knew. Two minutes is short
+ * enough that a per-minute window has reset by the time it expires, and long
+ * enough to cover the handful of turns that follow a rate limit.
+ */
+export const RATE_LIMIT_COOLDOWN_MS = 120_000
+
 export interface FailoverCandidateInput {
 	/** The provider that just failed. */
 	failedProviderId: string | undefined
@@ -36,6 +47,13 @@ export interface FailoverCandidateInput {
 	exhausted: ReadonlySet<string>
 	/** True when the provider has usable credentials. */
 	hasCredentials: (providerId: string) => boolean
+	/**
+	 * Provider id → when its cooldown ends, in epoch ms. Survives across turns,
+	 * unlike `exhausted`.
+	 */
+	cooldownUntil?: ReadonlyMap<string, number>
+	/** Injectable clock, so the cooldown is testable without waiting. */
+	now?: () => number
 }
 
 /**
@@ -53,6 +71,9 @@ export interface FailoverCandidateInput {
 export function selectNextProvider(input: FailoverCandidateInput): ApiProvider | undefined {
 	const order = input.configuredOrder.length > 0 ? input.configuredOrder : DEFAULT_FAILOVER_ORDER
 	const failed = input.failedProviderId ? toLegacyApiProvider(input.failedProviderId) : undefined
+	const now = (input.now ?? Date.now)()
+
+	const cooling: ApiProvider[] = []
 
 	for (const candidate of order) {
 		const normalized = toLegacyApiProvider(candidate)
@@ -62,9 +83,18 @@ export function selectNextProvider(input: FailoverCandidateInput): ApiProvider |
 		if (!input.hasCredentials(normalized)) {
 			continue
 		}
+		const until = input.cooldownUntil?.get(normalized)
+		if (until !== undefined && until > now) {
+			// Recently rate limited. Held back rather than dropped: if nothing
+			// else is usable, a provider that might have recovered still beats
+			// failing the task outright.
+			cooling.push(candidate)
+			continue
+		}
 		return candidate
 	}
-	return undefined
+
+	return cooling[0]
 }
 
 /**
