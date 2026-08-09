@@ -257,7 +257,7 @@ describe("classifier and coordinator agree", () => {
 	it("passes the classified kind through to the question the user sees", async () => {
 		const asked = makeHarness({ mode: "ask", answer: "Stay and show the error" })
 		asked.coordinator.beginTurn()
-		const askQuestion = vi.fn(async () => "Stay and show the error")
+		const askQuestion = vi.fn(async (_question: string, _options: string[]) => "Stay and show the error")
 
 		const coordinator = new SdkFailoverCoordinator({
 			getFailoverMode: () => "ask",
