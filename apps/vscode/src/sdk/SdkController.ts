@@ -628,7 +628,16 @@ export class Controller {
 			// The path that actually fires for provider errors. `onSendError`
 			// below covers the rarer case where the send itself rejects.
 			handleProviderFailure: ({ error, sessionId }) =>
-				this.tryFailoverOnProviderFailure(error, this.getSessionProviderId(sessionId), sessionId),
+				// The active provider takes precedence over the session's. The
+				// session id is captured when the session starts, so after one
+				// failover it still names the provider we already moved off —
+				// and failover would then "switch" onto the provider it is
+				// already using, producing a no-op that reads as progress.
+				this.tryFailoverOnProviderFailure(
+					error,
+					this.getActiveProviderId() ?? this.getSessionProviderId(sessionId),
+					sessionId,
+				),
 		})
 		// Subscribe to MCP tool list changes so we can restart the SDK session
 		// when servers are added/removed/reconnected. The SDK's DefaultSessionBuilder

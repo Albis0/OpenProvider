@@ -190,12 +190,31 @@ describe("SdkFailoverCoordinator", () => {
 	})
 
 	it("starts fresh on a genuinely new turn", async () => {
-		const { coordinator } = makeCoordinator({ order: ["nvidia", "groq"] as ApiProvider[] })
+		const { coordinator } = makeCoordinator({ order: ["nvidia", "groq", "gemini"] as ApiProvider[] })
 
 		await coordinator.handleRateLimit(attempt("nvidia"))
 		coordinator.beginTurn()
-		const afterNewTurn = await coordinator.handleRateLimit(attempt("nvidia"))
+		// The second failure comes from groq, because that is where the first
+		// switch left us. Reporting nvidia again would be a stale id, which the
+		// active-provider guard now treats as "already moved off that one".
+		const afterNewTurn = await coordinator.handleRateLimit(attempt("groq"))
 
-		expect(afterNewTurn).toEqual({ kind: "switched", to: "groq" })
+		expect(afterNewTurn).toEqual({ kind: "switched", to: "gemini" })
+	})
+
+	it("refuses to switch onto the provider already in use", async () => {
+		// A stale failedProviderId used to produce a no-op switch: the banner
+		// said it had moved, the resume went back to the same provider, and the
+		// task looped there. Seen on Gemini, 2026-08-09.
+		const { coordinator, getConfig } = makeCoordinator({ order: ["nvidia", "groq"] as ApiProvider[] })
+
+		await coordinator.handleRateLimit(attempt("nvidia"))
+		expect(getConfig().actModeApiProvider).toBe("groq")
+
+		coordinator.beginTurn()
+		const stale = await coordinator.handleRateLimit(attempt("nvidia"))
+
+		expect(stale).toEqual({ kind: "exhausted" })
+		expect(getConfig().actModeApiProvider).toBe("groq")
 	})
 })

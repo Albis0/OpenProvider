@@ -161,6 +161,15 @@ export class SdkFailoverCoordinator {
 		}
 
 		const config = this.options.getApiConfiguration()
+		// Belt and braces against a stale `failedProviderId`: whatever is
+		// currently configured is also off the table, because "switching" onto
+		// the provider already in use is a no-op that still emits a banner and
+		// resumes — i.e. an infinite retry against the thing that just failed.
+		const active = this.options.getMode() === "plan" ? config.planModeApiProvider : config.actModeApiProvider
+		if (active) {
+			this.exhausted.add(active)
+		}
+
 		const next = selectNextProvider({
 			failedProviderId: attempt.failedProviderId,
 			configuredOrder: this.options.getFailoverOrder(),
@@ -263,21 +272,48 @@ export class SdkFailoverCoordinator {
 		// controller's existing handleApiConfigurationChanged path.
 		this.options.applyApiConfiguration(next, previous)
 
-		// The restart is scheduled, not immediate. Resuming before it settles
-		// would send the retry to the session being replaced — i.e. straight back
-		// to the provider that just rate limited us.
-		await this.options.waitForPendingRebuilds()
+		// Detached on purpose — this is the difference between a working
+		// failover and a task stuck on "Thinking...".
+		//
+		// The caller is inside the session-event handler. `resumeTurn()` starts a
+		// whole new turn, which emits its own events into that same handler; if
+		// the second provider also fails, its error arrives while this call is
+		// still awaiting, and the two wait on each other. Observed on Gemini,
+		// 2026-08-09: nvidia handed off to gemini, gemini hit its own quota, and
+		// the turn hung with the spinner up until it was cancelled by hand.
+		//
+		// Returning now lets the event handler finish and the retry's events be
+		// processed normally. Nothing is lost: the decision to switch is already
+		// made and the banner is already out.
+		void this.resumeAfterSwitch(provider)
+	}
 
-		// resumeTurn() reaches the send — and therefore `onSendStart` →
-		// beginTurn() — before the promise it returns settles, so clearing the
-		// flag in `finally` still happens after the guarded call. This holds
-		// because the resume carries no prompt and so skips the one `await`
-		// (mention resolution) that would otherwise yield first.
-		this.isRetrying = true
+	/**
+	 * Waits for the session rebuild and then resumes, outside the event handler.
+	 *
+	 * Its errors are logged rather than thrown: nobody is awaiting this, so an
+	 * unhandled rejection would be the only trace.
+	 */
+	private async resumeAfterSwitch(provider: ApiProvider): Promise<void> {
 		try {
-			await this.options.resumeTurn()
-		} finally {
-			this.isRetrying = false
+			// The restart is scheduled, not immediate. Resuming before it settles
+			// would send the retry to the session being replaced — i.e. straight
+			// back to the provider that just rate limited us.
+			await this.options.waitForPendingRebuilds()
+
+			// resumeTurn() reaches the send — and therefore `onSendStart` →
+			// beginTurn() — before the promise it returns settles, so clearing the
+			// flag in `finally` still happens after the guarded call. This holds
+			// because the resume carries no prompt and so skips the one `await`
+			// (mention resolution) that would otherwise yield first.
+			this.isRetrying = true
+			try {
+				await this.options.resumeTurn()
+			} finally {
+				this.isRetrying = false
+			}
+		} catch (error) {
+			Logger.error(`[Failover] resume on ${provider} failed:`, error)
 		}
 	}
 }

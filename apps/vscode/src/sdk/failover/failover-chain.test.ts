@@ -29,6 +29,8 @@ interface Harness {
 	config: () => ApiConfiguration
 	resumed: () => number
 	setNow: (ms: number) => void
+	/** Replaces the resume, so a slow one can be observed mid-flight. */
+	setResumeTurn: (fn: () => Promise<void>) => void
 	/** Mirrors SdkController.tryFailoverOnProviderFailure. */
 	fail: (error: unknown, providerId: string) => Promise<boolean>
 }
@@ -46,6 +48,9 @@ function makeHarness(
 	const messages: ClineMessage[] = []
 	let resumed = 0
 	let now = 1_000_000
+	let resumeTurn: () => Promise<void> = async () => {
+		resumed += 1
+	}
 
 	const coordinator = new SdkFailoverCoordinator({
 		getFailoverMode: () => options.mode ?? "auto",
@@ -59,9 +64,7 @@ function makeHarness(
 		normalizeSwitch: (_previous, next) => next,
 		emitMessages: (batch) => messages.push(...batch),
 		waitForPendingRebuilds: async () => {},
-		resumeTurn: async () => {
-			resumed += 1
-		},
+		resumeTurn: () => resumeTurn(),
 		askQuestion: async () => options.answer ?? "Switch to groq",
 		now: () => now,
 	})
@@ -92,6 +95,9 @@ function makeHarness(
 		resumed: () => resumed,
 		setNow: (ms) => {
 			now = ms
+		},
+		setResumeTurn: (fn) => {
+			resumeTurn = fn
 		},
 		fail,
 	}
@@ -217,6 +223,61 @@ describe("failover chain, from a real provider error", () => {
 			// nvidia is still cooling, but it is the only candidate left, and a
 			// provider that might have recovered beats stopping.
 			expect(pair.config().actModeApiProvider).toBe("nvidia")
+		})
+	})
+
+	describe("the second provider also failing", () => {
+		/**
+		 * The shape that hung a real task: nvidia handed off to gemini, gemini hit
+		 * its own quota, and the turn sat on "Thinking..." until it was cancelled.
+		 */
+		it("does not switch onto the provider it is already using", async () => {
+			await harness.fail(new Error(NVIDIA_RATE_LIMIT), "nvidia")
+			expect(harness.config().actModeApiProvider).toBe("groq")
+
+			// A stale provider id — the session still names the provider we left.
+			// Without the active-provider guard this "switches" groq→groq, emits a
+			// banner, and resumes straight back into the failure.
+			const switched = await harness.fail(new Error(NVIDIA_RATE_LIMIT), "nvidia")
+
+			expect(harness.config().actModeApiProvider).toBe("gemini")
+			expect(switched).toBe(true)
+		})
+
+		it("gives up cleanly when the last provider fails too", async () => {
+			const pair = makeHarness({ withKeys: ["nvidia", "groq"], order: ["nvidia", "groq"] as ApiProvider[] })
+			pair.coordinator.beginTurn()
+
+			await pair.fail(new Error(NVIDIA_RATE_LIMIT), "nvidia")
+			const switched = await pair.fail(new Error(NVIDIA_RATE_LIMIT), "groq")
+
+			// False is what closes the turn. Returning true here is what left the
+			// spinner running forever.
+			expect(switched).toBe(false)
+			const banner = bannerPayloads(pair.messages).at(-1)
+			expect(banner?.to).toBe("")
+		})
+
+		it("resumes outside the caller, so an event handler is never blocked", async () => {
+			// switchTo must return before the resume finishes. Awaiting the resume
+			// inside the session-event handler deadlocks: the retry's own events
+			// cannot be processed while the handler that started it is still
+			// waiting on them.
+			let resumeReleased: (() => void) | undefined
+			const gate = new Promise<void>((resolve) => {
+				resumeReleased = resolve
+			})
+
+			const slow = makeHarness()
+			slow.coordinator.beginTurn()
+			slow.setResumeTurn(() => gate)
+
+			const outcome = await slow.fail(new Error(NVIDIA_RATE_LIMIT), "nvidia")
+
+			// Returned while the resume is still pending.
+			expect(outcome).toBe(true)
+			expect(slow.config().actModeApiProvider).toBe("groq")
+			resumeReleased?.()
 		})
 	})
 
