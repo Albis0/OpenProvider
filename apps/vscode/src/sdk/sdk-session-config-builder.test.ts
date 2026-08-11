@@ -71,6 +71,91 @@ describe("SdkSessionConfigBuilder", () => {
 		expect(baseBeforeModel).toHaveBeenCalledOnce()
 	})
 
+	// Groq emits reasoning and then refuses to accept it back, so a tool loop
+	// dies on its second request with "property 'reasoning_content' is
+	// unsupported" while single-turn chat looks fine.
+	it("strips reasoning from history on a provider that rejects it", async () => {
+		mocks.buildAgentHooks.mockReturnValueOnce({})
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, providerId: "groq" })
+
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			onSwitchToActMode: vi.fn(),
+		})
+
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		const result = await config.hooks?.beforeModel?.({
+			request: {
+				messages: [
+					{ role: "user", content: [{ type: "text", text: "hi" }] },
+					{
+						role: "assistant",
+						content: [
+							{ type: "reasoning", text: "thinking..." },
+							{ type: "text", text: "hello" },
+						],
+					},
+				],
+			},
+		} as never)
+
+		expect(result?.messages?.[1].content).toEqual([{ type: "text", text: "hello" }])
+	})
+
+	it("leaves history untouched on a provider that accepts reasoning", async () => {
+		mocks.buildAgentHooks.mockReturnValueOnce({})
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, providerId: "gemini" })
+
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			onSwitchToActMode: vi.fn(),
+		})
+
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		const result = await config.hooks?.beforeModel?.({
+			request: {
+				messages: [{ role: "assistant", content: [{ type: "reasoning", text: "thinking..." }] }],
+			},
+		} as never)
+
+		// No messages override at all, so the SDK keeps its own list.
+		expect(result?.messages).toBeUndefined()
+	})
+
+	// The sanitizer runs last, so it must clean what an earlier hook returned
+	// rather than the original request, or those messages go out unsanitized.
+	it("sanitizes messages a base hook returned, keeping its other fields", async () => {
+		mocks.buildAgentHooks.mockReturnValueOnce({
+			beforeModel: async () => ({
+				metadata: "base",
+				messages: [
+					{
+						role: "assistant",
+						content: [
+							{ type: "reasoning", text: "from base hook" },
+							{ type: "text", text: "kept" },
+						],
+					},
+				],
+			}),
+		})
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, providerId: "groq" })
+
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			onSwitchToActMode: vi.fn(),
+		})
+
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		const result = await config.hooks?.beforeModel?.({ request: { messages: [] } } as never)
+
+		expect(result?.messages?.[0].content).toEqual([{ type: "text", text: "kept" }])
+		expect((result as { metadata?: string })?.metadata).toBe("base")
+	})
+
 	it("passes the mistake-limit callback into the SDK config without overriding SDK execution defaults", async () => {
 		const onConsecutiveMistakeLimitReached = vi.fn()
 		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, execution: { maxRetries: 1 } })

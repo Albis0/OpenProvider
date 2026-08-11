@@ -1,8 +1,10 @@
 import type { CoreSessionConfig } from "@cline/core"
 import { type AgentTool, createTool } from "@cline/shared"
 import type { StateManager } from "@/core/storage/StateManager"
+import { Logger } from "@/shared/services/Logger"
 import { buildSessionConfig, type SessionConfigInput } from "./cline-session-factory"
 import { buildAgentHooks, type HookMessageEmitter } from "./hooks-adapter"
+import { providerRejectsReasoningHistory, stripReasoningParts } from "./reasoning-sanitizer"
 
 export interface SdkSessionConfigBuilderOptions {
 	stateManager: StateManager
@@ -22,17 +24,34 @@ export class SdkSessionConfigBuilder {
 		}
 
 		const baseHooks = buildAgentHooks(this.options.stateManager, this.options.emitHookMessage)
+		// Read once at build time: the session is rebuilt on a provider change,
+		// so this cannot go stale within a session.
+		const stripReasoning = providerRejectsReasoningHistory(config.providerId)
 		config.hooks = {
 			...baseHooks,
 			beforeModel: async (ctx) => {
 				const baseControl = await baseHooks.beforeModel?.(ctx)
+
+				// Drop reasoning the provider will refuse to accept back. Runs
+				// last so it cleans the final message list rather than a prefix
+				// of it, and preserves any messages an earlier hook returned.
+				let control = baseControl
+				if (stripReasoning) {
+					const source = baseControl?.messages ?? ctx.request.messages
+					const { messages, removed } = stripReasoningParts(source)
+					if (removed > 0) {
+						Logger.debug(`[SessionConfig] Removed ${removed} reasoning part(s) rejected by ${config.providerId}`)
+						control = { ...baseControl, messages }
+					}
+				}
+
 				if (this.options.shouldStopAfterModeSwitch?.()) {
 					return {
-						...baseControl,
+						...control,
 						stop: true,
 					}
 				}
-				return baseControl
+				return control
 			},
 		}
 		if (input.mode === "plan") {

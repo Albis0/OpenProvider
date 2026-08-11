@@ -2,7 +2,7 @@
 	"name": "openprovider",
 	"displayName": "OpenProvider",
 	"description": "One agent. Every provider. Free. A coding agent built for free API providers (NVIDIA Build, Groq, Cerebras, Gemini, OpenRouter) with quota visibility and provider-switch control.",
-	"version": "0.0.15",
+	"version": "0.0.16",
 	"icon": "assets/icons/icon.png",
 	"engines": {
 		"vscode": "^1.106.0"
