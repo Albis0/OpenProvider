@@ -647,6 +647,57 @@ describe("buildSessionConfig", () => {
 		expect(knownModel).not.toHaveProperty("temperature", -1)
 	})
 
+	// Groq counts *reserved* output against the same per-minute budget as input,
+	// so an uncapped agent request reserves the model's whole output window and
+	// is refused before it runs — for a prompt that would have used a fraction
+	// of it. The cap is what makes the free tier usable at all.
+	it("caps output on a provider whose quota counts tokens it only reserved", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "groq",
+			groqApiKey: "groq-key",
+		} as any)
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.providerId).toBe("groq")
+		expect((config as any).maxTokensPerTurn).toBe(2_048)
+	})
+
+	// A cap the user did not ask for, silently truncating their long answers, is
+	// worse than the quota error it prevents — so their own setting outranks it.
+	it("lets an explicit max-tokens override beat the provider default", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "groq",
+			groqApiKey: "groq-key",
+		} as any)
+		// The override is keyed by model id, so it has to be committed against the
+		// model this provider actually resolves to rather than a guessed one.
+		const groqProviderId = parseProviderId("groq")
+		const { modelId } = await buildSessionConfig({ cwd: "/tmp/workspace" })
+		createProviderConfigStore().commitSelection(groqProviderId, "act", {
+			providerId: groqProviderId,
+			modelId,
+			overrides: { maxTokens: 8_192 },
+		})
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect((config as any).maxTokensPerTurn).toBe(8_192)
+	})
+
+	// Everywhere else a cap only truncates good answers, so there is no default.
+	it("does not cap providers that bill only the tokens they generate", async () => {
+		mocks.stateManager.getApiConfiguration.mockReturnValue({
+			actModeApiProvider: "gemini",
+			geminiApiKey: "gemini-key",
+		} as any)
+
+		const config = await buildSessionConfig({ cwd: "/tmp/workspace" })
+
+		expect(config.providerId).toBe("gemini")
+		expect((config as any).maxTokensPerTurn).toBeUndefined()
+	})
+
 	it("passes OCA reasoning effort from legacy mode settings to SDK sessions", async () => {
 		mocks.stateManager.getApiConfiguration.mockReturnValue({
 			actModeApiProvider: "oca",

@@ -24,9 +24,6 @@ export class SdkSessionConfigBuilder {
 		}
 
 		const baseHooks = buildAgentHooks(this.options.stateManager, this.options.emitHookMessage)
-		// Read once at build time: the session is rebuilt on a provider change,
-		// so this cannot go stale within a session.
-		const stripReasoning = providerRejectsReasoningHistory(config.providerId)
 		config.hooks = {
 			...baseHooks,
 			beforeModel: async (ctx) => {
@@ -35,8 +32,14 @@ export class SdkSessionConfigBuilder {
 				// Drop reasoning the provider will refuse to accept back. Runs
 				// last so it cleans the final message list rather than a prefix
 				// of it, and preserves any messages an earlier hook returned.
+				//
+				// Asked per request, not once at build time: when a provider we
+				// had no entry for rejects reasoning, the repair path records it
+				// and resumes the *same* session. A value captured at build time
+				// would still say "don't strip" and the retry would fail
+				// identically, which is the whole failure this path exists to end.
 				let control = baseControl
-				if (stripReasoning) {
+				if (providerRejectsReasoningHistory(config.providerId)) {
 					const source = baseControl?.messages ?? ctx.request.messages
 					const { messages, removed } = stripReasoningParts(source)
 					if (removed > 0) {

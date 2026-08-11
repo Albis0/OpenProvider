@@ -1,5 +1,12 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { noteReasoningHistoryRejected, resetLearnedRejectors } from "./provider-compat"
 import { SdkSessionConfigBuilder } from "./sdk-session-config-builder"
+
+// Runtime discovery is process-wide, so a provider learned in one case would
+// otherwise leak into the next.
+afterEach(() => {
+	resetLearnedRejectors()
+})
 
 const mocks = vi.hoisted(() => ({
 	buildSessionConfig: vi.fn(),
@@ -154,6 +161,45 @@ describe("SdkSessionConfigBuilder", () => {
 
 		expect(result?.messages?.[0].content).toEqual([{ type: "text", text: "kept" }])
 		expect((result as { metadata?: string })?.metadata).toBe("base")
+	})
+
+	// The repair path records a rejecting provider and resumes the *same*
+	// session. If the hook captured the strip decision when the session was
+	// built, the retry would send the identical rejected request and the repair
+	// would be a no-op that still looked like it ran.
+	it("re-reads the strip decision per request, so a provider learned mid-session takes effect", async () => {
+		mocks.buildAgentHooks.mockReturnValueOnce({})
+		mocks.buildSessionConfig.mockResolvedValueOnce({ hooks: {}, providerId: "nvidia" })
+
+		const builder = new SdkSessionConfigBuilder({
+			stateManager: {} as never,
+			emitHookMessage: vi.fn(),
+			onSwitchToActMode: vi.fn(),
+		})
+
+		const config = await builder.build({ cwd: "/workspace", mode: "act" })
+		const ctx = {
+			request: {
+				messages: [
+					{
+						role: "assistant",
+						content: [
+							{ type: "reasoning", text: "thinking..." },
+							{ type: "text", text: "hello" },
+						],
+					},
+				],
+			},
+		}
+
+		// Nothing known about nvidia yet, so history goes out untouched.
+		expect((await config.hooks?.beforeModel?.(ctx as never))?.messages).toBeUndefined()
+
+		noteReasoningHistoryRejected("nvidia")
+
+		expect((await config.hooks?.beforeModel?.(ctx as never))?.messages?.[0].content).toEqual([
+			{ type: "text", text: "hello" },
+		])
 	})
 
 	it("passes the mistake-limit callback into the SDK config without overriding SDK execution defaults", async () => {

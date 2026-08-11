@@ -24,19 +24,18 @@
  * rather than imported because the two apps ship as separate bundles.
  */
 import type { AgentMessage, AgentMessagePart } from "@cline/agents"
+import { shouldStripReasoningHistory } from "./provider-compat"
 
 /**
- * Providers known to reject the reasoning they themselves produced.
+ * Whether this provider's history must have reasoning removed.
  *
- * Deliberately a list and not "strip for everyone": on providers that do accept
- * it, reasoning in history is useful context for the model, and throwing it
- * away would quietly degrade answers to fix a problem those providers do not
- * have.
+ * The decision itself lives in `provider-compat.ts` alongside the providers
+ * that *require* reasoning kept (DeepSeek, Gemini). Keeping a second list here
+ * is how those two groups drift apart: the same edit that adds a rejecting
+ * provider to one list is the edit that has to not add it to the other.
  */
-const PROVIDERS_REJECTING_REASONING = new Set(["groq"])
-
 export function providerRejectsReasoningHistory(providerId: string | undefined): boolean {
-	return providerId ? PROVIDERS_REJECTING_REASONING.has(providerId) : false
+	return shouldStripReasoningHistory(providerId)
 }
 
 export interface SanitizeResult {

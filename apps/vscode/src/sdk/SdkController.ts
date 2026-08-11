@@ -55,6 +55,7 @@ import { createProviderCatalog } from "./model-catalog/catalog"
 import type { Disposable, ProviderCatalog, ProviderConfigChange, ProviderConfigStore } from "./model-catalog/contracts"
 import { parseProviderId } from "./model-catalog/provider-id"
 import { createProviderConfigStore } from "./model-catalog/store"
+import { ProviderCompatRepair } from "./provider-compat-repair"
 import {
 	PROVIDER_FAILURE_ERROR_TYPE,
 	PROVIDER_FAILURE_PHASE,
@@ -172,6 +173,7 @@ export class Controller {
 	private terminalExecutionMode: SdkTerminalExecutionModeCoordinator
 	private providerChanges: SdkProviderChangeCoordinator
 	private failover: SdkFailoverCoordinator
+	private compatRepair: ProviderCompatRepair
 	private followups: SdkFollowupCoordinator
 	private taskControl: SdkTaskControlCoordinator
 	private taskStart: SdkTaskStartCoordinator
@@ -408,6 +410,11 @@ export class Controller {
 						failurePhase: PROVIDER_FAILURE_PHASE.PREFLIGHT,
 					})
 					this.emitClineBalanceError(errorMessage)
+				} else if (this.compatRepair.tryRepair(error, providerId)) {
+					// The provider refused a field rather than the request. Checked
+					// before failover on purpose: switching would spend a second
+					// provider's quota on a problem that travels with the request,
+					// and would land on the new provider unrepaired anyway.
 				} else if (await this.tryFailoverOnProviderFailure(error, providerId, sessionId)) {
 					// Switched providers and resumed the turn; the failover path
 					// already told the user what happened, so the error is not
@@ -534,6 +541,33 @@ export class Controller {
 			// new user message — the same thing the Retry button does.
 			resumeTurn: () => this.askResponse(),
 			askQuestion: (question, options) => this.interactions.handleAskQuestion(question, options, undefined),
+		})
+		this.compatRepair = new ProviderCompatRepair({
+			waitForPendingRebuilds: async () => {
+				await this.mode.waitForPendingRebuild()
+				await this.sessionRebuilds.waitUntilSettled()
+			},
+			resumeTurn: () => this.askResponse(),
+			// Same banner as failover's "why nothing switched" notice: from the
+			// user's side both are one story — something went wrong upstream and
+			// here is what was done about it — and two visually different notices
+			// for that would read as two unrelated features.
+			announce: (text) =>
+				this.messages.appendAndEmit(
+					[
+						{
+							ts: Date.now(),
+							type: "say",
+							say: "provider_failover",
+							text: JSON.stringify({ from: "", to: "", summary: text }),
+							partial: false,
+						},
+					],
+					{
+						type: "status",
+						payload: { sessionId: this.sessions.getActiveSession()?.sessionId ?? "", status: "running" },
+					},
+				),
 		})
 		this.followups = new SdkFollowupCoordinator({
 			stateManager: this.stateManager,

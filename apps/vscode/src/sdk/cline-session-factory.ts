@@ -49,6 +49,7 @@ import { nonNegativeFiniteNumber, positiveFiniteNumber, toSdkApiFormat } from ".
 import { parseProviderId } from "./model-catalog/provider-id"
 import { toSdkProviderId } from "./model-catalog/sdk-provider-id"
 import { createProviderConfigStore, resolveRuntimeModelSelection } from "./model-catalog/store"
+import { defaultMaxOutputTokens } from "./provider-compat"
 import { getProviderSettingsManager } from "./provider-migration"
 import { buildSapProviderConfig, type SapProviderConfig } from "./sap-config"
 import type { SdkSessionHost } from "./session-host"
@@ -789,7 +790,12 @@ export async function buildSessionConfig(input: SessionConfigInput): Promise<Cor
 	const overriddenMaxTokens = committedRuntimeModel?.overrides?.maxTokens
 	const maxTokensPerTurn =
 		positiveFiniteNumber(overriddenMaxTokens) ??
-		(providerId === "openai" ? resolveOpenAiCompatibleMaxTokens(apiConfig, mode) : undefined)
+		(providerId === "openai" ? resolveOpenAiCompatibleMaxTokens(apiConfig, mode) : undefined) ??
+		// Last resort, and only for providers that bill *reserved* output against
+		// the same quota as input (Groq). There an uncapped request reserves the
+		// model's whole output window and is refused before it runs, so "no cap"
+		// is not the neutral choice it looks like. Both settings above still win.
+		defaultMaxOutputTokens(providerId)
 	const temperature = nonNegativeFiniteNumber(committedRuntimeModel?.overrides?.temperature)
 	const reasoningConfig =
 		providerId === "oca"
