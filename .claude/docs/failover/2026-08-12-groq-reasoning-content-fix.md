@@ -12,6 +12,13 @@
 
 Kullanıcı modeli değiştirmeyi denedi, hata gitmedi.
 
+> **Sonraki gelişme (2026-08-12, aynı gün):** Bu düzeltme genelleştirildi.
+> Groq'a özel liste yerine üç durumlu bir sağlayıcı uyumluluk tablosu geldi
+> ([provider-compat.ts](../../../apps/vscode/src/sdk/provider-compat.ts)), çünkü
+> DeepSeek bu alanı **zorunlu tutuyor** ve Gemini'nin thought signature'ı tam da
+> bu parçaların üstünde taşınıyor — "hepsinden sil" ikisini de kırardı. Detay:
+> [API uyumluluk katmanı](../provider-uyumluluk/2026-08-12-api-uyumluluk-katmani.md).
+
 ---
 
 ## 1. Neden model değiştirmek işe yaramadı
