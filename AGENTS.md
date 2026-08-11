@@ -8,7 +8,9 @@ Start with `docs/fork/REPO-MAP.md`. It maps where providers are defined, what to
 - Removed the Cline-hosted account, ClinePass, billing and org remote-config subsystems. They depended on `api.cline.bot` / `app.cline.bot`, which this fork does not operate. `AuthService` was kept but stripped: the OpenRouter, Requesty, Hicap, Codex and OCA OAuth flows still work.
 - Removed PostHog telemetry, error reporting and feature flags, which reported to Cline's `data.cline.bot`. Self-hosted OpenTelemetry export is untouched.
 
-**Do not rename these**, or existing installs lose their data: `.clinerules` / `.clineignore` filenames, the `Documents/Cline/Rules` path, storage and secret keys, provider and model IDs, the `cline` proto namespace, and internal type names such as `ClineMessage`.
+**Do not rename these**, or existing installs lose their data: `.clineignore` filenames, the `Documents/Cline/Rules` path, storage and secret keys, provider and model IDs, the `cline` proto namespace, and internal type names such as `ClineMessage`.
+
+Rules directories are the one exception. New ones are created as `.openproviderrules`, but `.clinerules` is still read when a project has it — see `apps/vscode/src/shared/rule-directory-names.ts`, which is the only place the name is decided. Resolve through it rather than hardcoding either name.
 
 ## Scope
 

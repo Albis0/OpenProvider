@@ -127,7 +127,7 @@ Bunlara dokunmak mevcut kurulumları veya kullanıcı verisini bozardı:
 
 | Ne | Neden |
 |---|---|
-| `.clinerules` / `.clineignore` dosya adları | Kullanıcıların diskte mevcut dosyaları var; adı değişirse sessizce çalışmaz olur |
+| `.clineignore` dosya adı | Kullanıcıların diskte mevcut dosyaları var; adı değişirse sessizce çalışmaz olur |
 | `Documents/Cline/Rules` klasör yolu | Aynı gerekçe — diskte gerçek bir klasör |
 | `SECRETS_KEYS` girdileri (`clineApiKey`, `clineAccountId` vb.) | globalState/secrets anahtarları; değişirse mevcut kurulumda tüm API key'ler kaybolur |
 | `cline.generatedMachineId` globalState anahtarı | Aynı gerekçe (kalıcı kullanıcı verisi) |
@@ -135,6 +135,23 @@ Bunlara dokunmak mevcut kurulumları veya kullanıcı verisini bozardı:
 | `ClineMessage`, `ClineSayTool`, `createClineAPI` gibi iç tip/fonksiyon adları | Refactor kapsam dışı; kullanıcıya görünmüyor |
 | `proto/cline/*.proto` namespace'i | Dahili gRPC namespace'i; değiştirmek tüm generated kodu yeniden üretmeyi gerektirir |
 | `LICENSE` | Apache-2.0 metni aynen korunur |
+
+### 5.1 Kural klasörü — sonradan değişti (2026-08-11)
+
+Yukarıdaki tabloda `.clinerules` bir zamanlar "dokunulmaz" listesindeydi. Artık değil,
+ama **yeniden adlandırılmadı** da — ikisi birden destekleniyor:
+
+- Yeni klasörler `.openproviderrules` olarak oluşturuluyor.
+- Projede zaten `.clinerules` varsa o okunmaya devam ediyor.
+- İkisi de varsa `.openproviderrules` kazanıyor.
+
+Karar tek bir yerde veriliyor: `apps/vscode/src/shared/rule-directory-names.ts`.
+Yeni bir kural-klasörü araması eklerken adı elle yazmak yerine oradaki
+`resolveRulesDirName()` çağrılmalı.
+
+Gerekçe: düz yeniden adlandırma, kullanıcının mevcut `.clinerules` dosyalarının
+**sessizce** yok sayılması demekti — hata yok, uyarı yok, ajan sadece kullanıcının
+kurallarını görmezden geliyor. Bu, mümkün olan en kötü arıza türü.
 
 ---
 

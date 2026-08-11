@@ -132,4 +132,6 @@ sudo apt install -y \
 
 Fork-specific documentation lives under `docs/fork/` so that rebasing onto upstream Cline stays conflict-free. Keep new fork-only docs there rather than editing upstream files where you can.
 
-Deliberately unchanged from upstream, to avoid breaking existing user data: `.clinerules` and `.clineignore` filenames, the `Documents/Cline/Rules` path, storage and secret keys, provider and model IDs, the `cline` proto namespace, and internal type names such as `ClineMessage`. Do not rename these.
+Deliberately unchanged from upstream, to avoid breaking existing user data: the `.clineignore` filename, the `Documents/Cline/Rules` path, storage and secret keys, provider and model IDs, the `cline` proto namespace, and internal type names such as `ClineMessage`. Do not rename these.
+
+Rules directories are the exception: new ones are created as `.openproviderrules`, while an existing `.clinerules` is still read. Both names resolve through `apps/vscode/src/shared/rule-directory-names.ts` — add any new rules-directory lookup there instead of hardcoding a name, or projects on the legacy layout will silently stop loading their rules.
