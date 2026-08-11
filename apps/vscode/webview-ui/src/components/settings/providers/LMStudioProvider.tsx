@@ -204,8 +204,8 @@ export const LMStudioProvider = ({ currentMode }: LMStudioProviderProps) => {
 				</VSCodeLink>{" "}
 				feature with <code>lms server start</code> to use it with this extension.{" "}
 				<div className="text-error">
-					<span className="font-semibold">Note:</span> Cline uses complex prompts, so behavior can vary across models.
-					Less capable models may not work as expected.
+					<span className="font-semibold">Note:</span> OpenProvider uses complex prompts, so behavior can vary across
+					models. Less capable models may not work as expected.
 				</div>
 			</div>
 		</div>

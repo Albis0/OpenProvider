@@ -1,4 +1,6 @@
 import { HookInfo, HooksToggles, WorkspaceHooks } from "@shared/proto/cline/file"
+import { resolveRulesDirName } from "@shared/rule-directory-names"
+import { fileExistsAtPath } from "@utils/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -34,7 +36,10 @@ export async function refreshHooks(
 	const workspaceHooksList: WorkspaceHooks[] = []
 
 	for (const workspacePath of workspacePaths.paths) {
-		const workspaceHooksDir = path.join(workspacePath, ".clinerules", "hooks")
+		// Follows the same directory the rules loader picked, so hooks keep
+		// working in projects still carrying the legacy `.clinerules`.
+		const rulesDirName = await resolveRulesDirName(workspacePath, fileExistsAtPath, path.join)
+		const workspaceHooksDir = path.join(workspacePath, rulesDirName, "hooks")
 		const hooks: HookInfo[] = []
 
 		for (const hookName of VALID_HOOK_TYPES) {

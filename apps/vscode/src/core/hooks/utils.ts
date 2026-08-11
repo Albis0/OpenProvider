@@ -1,3 +1,5 @@
+import { resolveRulesDirName } from "@shared/rule-directory-names"
+import { fileExistsAtPath } from "@utils/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -5,7 +7,7 @@ import { HostProvider } from "@/hosts/host-provider"
 import { getCwd, getDesktopDir } from "@/utils/path"
 
 /**
- * All valid hook types that can be created and executed by Cline.
+ * All valid hook types that can be created and executed by OpenProvider.
  * These hooks correspond to specific lifecycle events in the task execution process.
  */
 export const VALID_HOOK_TYPES = [
@@ -62,12 +64,12 @@ export async function resolveHooksDirectory(
 		if (!targetWorkspace) {
 			throw new Error(`Workspace "${workspaceName}" not found`)
 		}
-		return path.join(targetWorkspace, ".clinerules", "hooks")
+		return path.join(targetWorkspace, await resolveRulesDirName(targetWorkspace, fileExistsAtPath, path.join), "hooks")
 	}
 
 	// Single workspace: use getCwd
 	const cwd = await getCwd(getDesktopDir())
-	return path.join(cwd, ".clinerules", "hooks")
+	return path.join(cwd, await resolveRulesDirName(cwd, fileExistsAtPath, path.join), "hooks")
 }
 
 /**

@@ -1,5 +1,6 @@
 import { ClineRulesToggles } from "@shared/cline-rules"
 import { GlobalInstructionsFile } from "@shared/remote-config/schema"
+import { resolveRulesDirName } from "@shared/rule-directory-names"
 import { fileExistsAtPath, isDirectory, readDirectory } from "@utils/fs"
 import fs from "fs/promises"
 import * as path from "path"
@@ -146,11 +147,6 @@ export function combineRuleToggles(toggles1: ClineRulesToggles, toggles2: ClineR
 const getRuleFilesTotalContent = async (rulesFilePaths: string[], basePath: string, toggles: ClineRulesToggles) => {
 	return (await getRuleFilesTotalContentWithMetadata(rulesFilePaths, basePath, toggles)).content
 }
-
-const LOCAL_RULE_PATHS = {
-	clineRules: ".clinerules",
-	workflows: ".clinerules/workflows",
-} as const
 
 type ActivatedConditionalRule = {
 	name: string
@@ -352,7 +348,12 @@ export const createRuleFile = async (isGlobal: boolean, filename: string, cwd: s
 				filePath = path.join(globalClineRulesFilePath, filename)
 			}
 		} else {
-			const localClineRulesFilePath = path.resolve(cwd, LOCAL_RULE_PATHS.clineRules)
+			// Adopts the directory the project already uses. Without this, a
+			// project holding a `.clinerules` would get a second, near-empty
+			// `.openproviderrules` next to it and the user would be left with two
+			// rules directories and no clue which one is live.
+			const rulesDirName = await resolveRulesDirName(cwd, fileExistsAtPath, path.join)
+			const localClineRulesFilePath = path.resolve(cwd, rulesDirName)
 
 			const hasError = await ensureLocalClineDirExists(localClineRulesFilePath, "default-rules.md")
 			if (hasError === true) {
@@ -362,7 +363,9 @@ export const createRuleFile = async (isGlobal: boolean, filename: string, cwd: s
 			await fs.mkdir(localClineRulesFilePath, { recursive: true })
 
 			if (type === "workflow") {
-				const localWorkflowsFilePath = path.resolve(cwd, LOCAL_RULE_PATHS.workflows)
+				// Same directory the rules resolved to, so workflows never land
+				// in a different tree than the rules beside them.
+				const localWorkflowsFilePath = path.resolve(cwd, rulesDirName, "workflows")
 
 				const hasError = await ensureLocalClineDirExists(localWorkflowsFilePath, "default-workflows.md")
 				if (hasError === true) {
