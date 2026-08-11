@@ -56,7 +56,7 @@ export async function initialize(storageContext: StorageContext): Promise<Webvie
 	try {
 		await StateManager.initialize(storageContext)
 	} catch (error) {
-		Logger.error("[Cline] CRITICAL: Failed to initialize StateManager:", error)
+		Logger.error("[OpenProvider] CRITICAL: Failed to initialize StateManager:", error)
 		HostProvider.window.showMessage({
 			type: ShowMessageType.ERROR,
 			message: "Failed to initialize storage. Please check logs for details or try restarting the client.",
@@ -115,7 +115,7 @@ async function showVersionUpdateAnnouncement(stateManager: StateManager) {
 	// Perform post-update actions if necessary
 	try {
 		if (!previousVersion || currentVersion !== previousVersion) {
-			Logger.log(`Cline version changed: ${previousVersion} -> ${currentVersion}. First run or update detected.`)
+			Logger.log(`OpenProvider version changed: ${previousVersion} -> ${currentVersion}. First run or update detected.`)
 
 			// Check if there's a new announcement to show
 			const lastShownAnnouncementId = stateManager.getGlobalStateKey("lastShownAnnouncementId")
@@ -197,7 +197,7 @@ export async function tearDown(): Promise<void> {
 		try {
 			await StateManager.get().flushPendingState()
 		} catch (error) {
-			Logger.error("[Cline] Failed to flush pending state during teardown:", error)
+			Logger.error("[OpenProvider] Failed to flush pending state during teardown:", error)
 		}
 	}
 }
