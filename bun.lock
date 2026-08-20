@@ -32,7 +32,7 @@
     },
     "apps/vscode": {
       "name": "openprovider",
-      "version": "0.0.9",
+      "version": "0.0.17",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.37.0",
         "@bufbuild/protobuf": "^2.2.5",
