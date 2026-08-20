@@ -132,6 +132,23 @@ const RATE_LIMIT_PHRASES = [
 	/request limit reached/i,
 	/limit reached \(\d+\s*\/\s*\d+\)/i,
 	/out of capacity/i,
+	// Groq, measured live on 2026-08-17:
+	//   "Request too large ... on tokens per minute (TPM): Limit 8000,
+	//    Requested 32209, please reduce your message size"
+	// A per-minute budget refusal, but it says neither "rate limit" nor
+	// "quota", and the SDK delivers provider errors as a bare string with no
+	// status attached — so layers 1 and 2 cannot see the 429 either. Without
+	// these patterns the first failure of a turn is classified
+	// not-failover-worthy and the task stays on the exhausted provider until a
+	// second failure trips the repetition layer, wasting a turn on every limit.
+	//
+	// Matching is anchored on the *rate* dimension (per minute/day) rather than
+	// on "too large": a plain context-window overflow is the same request
+	// failing everywhere, and moving it down the chain would produce one
+	// identical failure per provider.
+	/tokens? per (?:minute|day)/i,
+	/requests? per (?:minute|day)/i,
+	/\b(?:TPM|RPM|TPD|RPD)\b/,
 ]
 
 const OVERLOADED_PHRASES = [/overloaded/i, /server is busy/i, /temporarily unavailable/i, /try again later/i]
