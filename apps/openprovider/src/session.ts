@@ -39,6 +39,8 @@ import {
 import {
 	type ChainPlan,
 	classifyError,
+	compactForHandover,
+	type CompactionRunner,
 	CORE_ROLE,
 	describeChain,
 	describeSwitch,
@@ -161,6 +163,13 @@ export interface SessionOptions {
 	onProviderSwitch?: SwitchDecider;
 	/** Injectable delay, so tests do not actually wait. */
 	sleep?: (ms: number) => Promise<void>;
+	/**
+	 * Runs the summarising model when a failover compacts context.
+	 *
+	 * Defaults to the same `agentFactory` the task itself uses, so a caller that
+	 * already stubbed the factory gets a stubbed compressor for free.
+	 */
+	compactionRunner?: CompactionRunner;
 }
 
 function defaultSleep(ms: number): Promise<void> {
@@ -230,6 +239,8 @@ export class OpenProviderSession {
 		private readonly agentFactory: AgentFactory,
 		private readonly tracker: QuotaTracker | undefined,
 		private readonly rateLimitObserver: RateLimitObserver | undefined,
+		/** Resolved once in `create`, so the compressor can look up its own key. */
+		private readonly credentials: CredentialSource,
 	) {}
 
 	static async create(
@@ -284,6 +295,7 @@ export class OpenProviderSession {
 			options.agentFactory ?? defaultAgentFactory,
 			tracker,
 			observer,
+			credentials,
 		);
 	}
 
@@ -316,6 +328,45 @@ export class OpenProviderSession {
 	/** Clears runtime knock-outs, e.g. after a rate limit window passes. */
 	resetAvailability(): void {
 		this.router.resetAvailability();
+	}
+
+	/**
+	 * The compressing model, as a one-shot call.
+	 *
+	 * Built on the same `agentFactory` as the task so there is one place that
+	 * knows how to talk to a provider. Context injection is deliberately absent:
+	 * the whole job is to make the payload *smaller*, and the repo map is the
+	 * largest thing the context transform adds. The output cap is set from the
+	 * compression config rather than the routing one for the same reason.
+	 */
+	private defaultCompactionRunner(): CompactionRunner {
+		return async ({ providerId, modelId, maxTokens, systemPrompt, prompt }) => {
+			const found = this.credentials.get(providerId);
+			if (!found) {
+				throw new Error(`no credentials for ${providerId}`);
+			}
+
+			const agent = this.agentFactory({
+				providerId,
+				modelId: modelId ?? found.model,
+				apiKey: found.apiKey,
+				beforeModel: composeBeforeModel([
+					createOutputCapTransform(maxTokens),
+				]),
+				// No tools: a summariser that can edit files is a summariser that
+				// might, and this call is not the one doing the work.
+				tools: undefined,
+				// One round trip. A summary does not need an agent loop, and a
+				// compressor that iterates would cost what it is meant to save.
+				maxIterations: 1,
+			});
+
+			const outcome = await agent.run(`${systemPrompt}\n\n${prompt}`);
+			if (outcome.error) {
+				throw new Error(outcome.error);
+			}
+			return outcome.text;
+		};
 	}
 
 	private buildHook(
@@ -398,6 +449,13 @@ export class OpenProviderSession {
 			// Bounded by the number of providers, so a chain of failures cannot
 			// cycle forever.
 			let switchesLeft = Math.max(1, this.config.fallback.length + 1);
+			// Rewritten in place when a switch compacts the context, so the next
+			// provider inherits the brief rather than the payload that just got
+			// refused.
+			let currentPrompt = attemptPrompt;
+			// Work already produced this attempt, so the brief can say what was
+			// done rather than only what was asked.
+			const priorOutputs: string[] = [];
 
 			for (;;) {
 				const route = this.router.route(prompt, runOptions.mode, role);
@@ -429,7 +487,7 @@ export class OpenProviderSession {
 				// adding one would change the factory contract for every existing
 				// caller to serve a feature that is off by default.
 				const outcome = await agent.run(
-					role ? `${ROLE_PROMPTS[role]}\n\n${attemptPrompt}` : attemptPrompt,
+					role ? `${ROLE_PROMPTS[role]}\n\n${currentPrompt}` : currentPrompt,
 				);
 				// Recorded even on failure: a rejected request can still consume
 				// quota, and a provider that fails repeatedly is worth seeing.
@@ -488,6 +546,46 @@ export class OpenProviderSession {
 				switchesLeft -= 1;
 				if (switchesLeft <= 0 || !request.to) {
 					return outcome;
+				}
+
+				// The switch is now certain, so the context can be rewritten for
+				// whoever inherits it. This sits here rather than at the top of the
+				// loop because `request.to` is the first point at which the receiving
+				// provider is known, and compressing for a switch that does not
+				// happen would spend a call for nothing.
+				//
+				// Anything that goes wrong inside returns the original prompt, so
+				// the pre-existing raw-context behaviour is the floor, never a
+				// failure mode.
+				if (outcome.text.trim().length > 0) {
+					priorOutputs.push(outcome.text);
+				}
+				const compaction = await compactForHandover(
+					{
+						prompt: currentPrompt,
+						fromProviderId: route.providerId,
+						toProviderId: request.to,
+						priorOutputs,
+					},
+					{
+						config: this.config.compression,
+						run:
+							this.options.compactionRunner ?? this.defaultCompactionRunner(),
+						hasCredentials: (providerId) =>
+							this.credentials.get(providerId) !== undefined,
+						onEvent: this.options.onEvent,
+					},
+				);
+				if (compaction.compacted) {
+					currentPrompt = compaction.prompt;
+					notices.push(
+						`context compacted for ${request.to} ` +
+							`(${compaction.originalChars} → ${compaction.compactedChars} chars)`,
+					);
+				} else if (this.config.compression.enabled) {
+					// Only worth saying when the user asked for compaction; otherwise
+					// "compaction is off" on every switch is pure noise.
+					notices.push(`context not compacted: ${compaction.reason}`);
 				}
 			}
 		};

@@ -18,6 +18,11 @@
 		"gemini",
 		"groq"
 	],
+	"compression": {
+		"provider": "groq",
+		"enabled": false,
+		"maxTokens": 1024
+	},
 	"disabled": [],
 	"maxOutputTokens": 4096
 }

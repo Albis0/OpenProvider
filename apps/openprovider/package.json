@@ -12,6 +12,7 @@
 		"probe:agent": "bun run src/probe-context-agent.ts",
 		"probe:free-tier": "bun run src/probe-free-tier.ts",
 		"probe:multi-agent": "bun run src/probe-multi-agent.ts",
+		"probe:compaction": "bun run src/probe-compaction.ts",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {

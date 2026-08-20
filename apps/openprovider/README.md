@@ -94,6 +94,7 @@ bun run --cwd ../.. build:sdk    # SDK dist/ üzerinden çözülüyor, şart
 | `bun run src/probe-provider-compat.ts` | Sağlayıcı tuhaflıkları, Groq'un araç döngüsü |
 | `bun run src/probe-quota.ts` | Kota takibi ve rate limit başlıkları |
 | `bun run src/probe-switch.ts` | Rate limit'te sorarak geçiş (bekle / geç / dur) |
+| `bun run probe:compaction` | Geçiş sırasında context'i ucuz bir modelle sıkıştırma |
 | `bun run probe:free-tier` | Groq'un "Request too large" hatası ve çözümü |
 | `bun run typecheck` | `tsc --noEmit` |
 
@@ -105,6 +106,33 @@ bun run probe:engine "C:/yol/projeye" --prompt "aradığın şey"
 
 Sağlayıcı seçimi env ile geçersiz kılınabilir:
 `OPENPROVIDER_PROVIDER`, `OPENPROVIDER_MODEL`, `OPENPROVIDER_API_KEY`.
+
+### Geçişte context sıkıştırma
+
+Bir sağlayıcı limite takılıp görev başkasına devredilirken, context'i ham
+haliyle taşımak yerine ucuz/hızlı bir model onu öz bir brief'e çevirebilir.
+Sebep ölçülmüş: gerçek bir ajan turu 32209 token ölçüldü, Groq'un ücretsiz
+katmanı ise 8000 TPM'de reddediyor — aynı 32k'yı zincirdeki her sağlayıcıya
+taşımak, kotaları tek tek yakıp görevi öldürüyor.
+
+`openprovider.config.json`:
+
+```json
+"compression": {
+  "provider": "groq",
+  "model": "openai/gpt-oss-safeguard-20b",
+  "enabled": true,
+  "maxTokens": 1024
+}
+```
+
+- **Varsayılan olarak kapalı.** Açmak fazladan bir çağrı harcar; bunu sormadan
+  yapmak yanlış olurdu.
+- Sıkıştırma sağlayıcısı, **görevin çalıştığı sağlayıcıdan farklı olmalı** —
+  kotası biten sağlayıcıdan kendi geçmişini özetlemesini istemek aynı hatayla
+  başarısız olur. Kod bu durumu tespit edip sıkıştırmayı atlar.
+- Sıkıştırma başarısız olursa (limit, timeout, boş cevap, anahtar yok)
+  **ham context'e dönülür, görev durmaz.**
 
 ---
 

@@ -17,12 +17,27 @@ export {
 	type PlanChainOptions,
 } from "./chain";
 export {
+	COMPACTION_MIN_CHARS,
+	COMPACTION_SYSTEM_PROMPT,
+	COMPACTION_TIMEOUT_MS,
+	compactForHandover,
+	type CompactionInput,
+	type CompactionOptions,
+	type CompactionResult,
+	type CompactionRunner,
+	renderCompactionRequest,
+	renderHandoverPrompt,
+} from "./compaction";
+export {
 	CONFIG_FILENAME,
+	type CompressionTarget,
+	EMPTY_COMPRESSION,
 	EMPTY_CONFIG,
 	EMPTY_ROLE_CONFIG,
 	loadConfig,
 	type LoadedConfig,
 	type ModeTarget,
+	parseCompression,
 	parseConfig,
 	parseRoleConfig,
 	type RoleConfig,

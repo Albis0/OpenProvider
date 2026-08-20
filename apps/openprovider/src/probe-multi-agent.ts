@@ -43,6 +43,7 @@ const CHAIN_CONFIG: RoutingConfig = {
 		code: { provider: "beta" },
 		docs: { provider: "beta" },
 	},
+	compression: { enabled: false, maxTokens: 1024 },
 	roleConfig: {
 		enabled: true,
 		roles: {

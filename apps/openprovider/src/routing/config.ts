@@ -66,11 +66,42 @@ export const EMPTY_ROLE_CONFIG: RoleConfig = {
 	roles: {},
 };
 
+/**
+ * The small, fast model that rewrites the conversation before a failover.
+ *
+ * Separate from `modes` and `roleConfig` because it answers a different
+ * question: those pick who does the *work*, this picks who summarises it. It
+ * is deliberately a provider the task is not running on — asking the provider
+ * that just ran out of quota to compress its own history would fail for the
+ * same reason the original request did.
+ */
+export interface CompressionTarget {
+	/** Provider id, e.g. "groq". When unset, compression is off. */
+	provider?: string;
+	/** Model id. Falls back to the provider's stored default. */
+	model?: string;
+	/**
+	 * Master switch. Off by default: compression spends an extra call on a
+	 * provider the user did not pick, and a failover that silently rewrites the
+	 * conversation is a surprise when it goes wrong.
+	 */
+	enabled: boolean;
+	/** Output ceiling for the summary itself. A summary that needs 4k is not one. */
+	maxTokens: number;
+}
+
+export const EMPTY_COMPRESSION: CompressionTarget = {
+	enabled: false,
+	maxTokens: 1024,
+};
+
 export interface RoutingConfig {
 	defaultMode: Mode;
 	modes: Partial<Record<Mode, ModeTarget>>;
 	/** Multi-agent role pipeline. Disabled unless the config says otherwise. */
 	roleConfig: RoleConfig;
+	/** Who rewrites the context when a failover moves the task. */
+	compression: CompressionTarget;
 	/** Providers to try, in order, when a mode's provider cannot serve. */
 	fallback: string[];
 	/** Providers the user has switched off by hand. Skipped entirely. */
@@ -87,6 +118,7 @@ export const EMPTY_CONFIG: RoutingConfig = {
 	defaultMode: DEFAULT_MODE,
 	modes: {},
 	roleConfig: { ...EMPTY_ROLE_CONFIG },
+	compression: { ...EMPTY_COMPRESSION },
 	fallback: [],
 	disabled: [],
 	maxOutputTokens: 4096,
@@ -136,6 +168,41 @@ function parseRoleTarget(value: unknown): RoleTarget | undefined {
 	// returning it would make `roles.planner: {}` look configured when it is
 	// not, which changes whether the chain runs.
 	return Object.keys(target).length > 0 ? target : undefined;
+}
+
+/**
+ * Parses the compression block.
+ *
+ * A block naming no provider is forced back to `enabled: false` rather than
+ * trusted: `{"enabled": true}` with nothing to call would arm a feature that
+ * can only fail, and it would fail at the worst moment — mid-failover, when
+ * the task is already in trouble.
+ */
+export function parseCompression(raw: unknown): CompressionTarget {
+	if (!raw || typeof raw !== "object") {
+		return { ...EMPTY_COMPRESSION };
+	}
+	const record = raw as Record<string, unknown>;
+
+	const provider =
+		typeof record.provider === "string" && record.provider.length > 0
+			? record.provider
+			: undefined;
+	const model =
+		typeof record.model === "string" && record.model.length > 0
+			? record.model
+			: undefined;
+	const maxTokens =
+		typeof record.maxTokens === "number" && record.maxTokens > 0
+			? Math.floor(record.maxTokens)
+			: EMPTY_COMPRESSION.maxTokens;
+
+	return {
+		provider,
+		model,
+		enabled: record.enabled === true && provider !== undefined,
+		maxTokens,
+	};
 }
 
 export function parseRoleConfig(raw: unknown): RoleConfig {
@@ -202,6 +269,7 @@ export function parseConfig(raw: unknown): RoutingConfig {
 		defaultMode,
 		modes,
 		roleConfig: parseRoleConfig(record.roleConfig),
+		compression: parseCompression(record.compression),
 		fallback: asStringArray(record.fallback),
 		disabled: asStringArray(record.disabled),
 		maxOutputTokens,
@@ -279,10 +347,23 @@ export function suggestConfig(availableProviders: readonly string[]): RoutingCon
 		};
 	}
 
+	// The compression seat is written out with a suggested provider so the user
+	// can turn it on by flipping one flag, but stays off for the same reason the
+	// role chain does: it spends an extra call they did not ask for. The
+	// *cheapest* provider available is suggested rather than the primary —
+	// summarising is mechanical work, and putting it on the primary would mean a
+	// rate limit there takes out both the task and its own recovery.
+	const compressionProvider = ordered.find((id) => id === "groq") ?? secondary;
+
 	return {
 		defaultMode: DEFAULT_MODE,
 		modes,
 		roleConfig: { enabled: false, roles },
+		compression: {
+			provider: compressionProvider,
+			enabled: false,
+			maxTokens: 1024,
+		},
 		fallback: ordered,
 		disabled: [],
 		maxOutputTokens: 4096,
