@@ -95,6 +95,7 @@ bun run --cwd ../.. build:sdk    # SDK dist/ üzerinden çözülüyor, şart
 | `bun run src/probe-quota.ts` | Kota takibi ve rate limit başlıkları |
 | `bun run src/probe-switch.ts` | Rate limit'te sorarak geçiş (bekle / geç / dur) |
 | `bun run probe:compaction` | Geçiş sırasında context'i ucuz bir modelle sıkıştırma |
+| `bun run probe:compaction-live` | Sıkıştırmanın *kalitesi*, gerçek Groq modeliyle (anahtar yoksa SKIP) |
 | `bun run probe:free-tier` | Groq'un "Request too large" hatası ve çözümü |
 | `bun run typecheck` | `tsc --noEmit` |
 

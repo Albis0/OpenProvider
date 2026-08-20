@@ -189,9 +189,12 @@ iyileştirmek yerine kötüleştirir.
 
 ## Bilinen sınırlar — dürüst liste
 
-- **Canlı bir sağlayıcıyla hiç denenmedi.** Tüm doğrulama stub'lı. Gerçek bir
-  Groq çağrısıyla özetin *kalitesi* ölçülmedi — ölçülen, mekanizmanın
-  doğruluğu ve başarısızlıkta görevi düşürmemesi.
+- ~~**Canlı bir sağlayıcıyla hiç denenmedi.**~~ **2026-08-20'de kapatıldı.**
+  `probe:compaction-live` gerçek Groq modeliyle ölçüyor: 6396 → ~1900 karakter
+  (orijinalin %30-35'i), ~1.3 saniye. Brief, alıcı modelin ihtiyaç duyduğu
+  altı şeyin hepsini koruyor — dosya yolları, birebir assertion hata metni,
+  teşhis, kullanıcının kısıtı, kalan adımlar — ve 40 satırlık gürültüyü atıyor.
+  Detay: `.claude/docs/failover/2026-08-20-sinifllandirici-ve-sikistirma-kalitesi.md`
 - **Sıkıştırma sadece `apps/openprovider`'da.** VS Code eklentisinin kendi
   failover'ı (`apps/vscode/src/sdk/failover/`) ayrı bir uygulama ve bu
   özelliği almadı. Görev tanımı `switch-policy.ts` akışını işaret ediyordu, o
