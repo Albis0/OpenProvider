@@ -16,6 +16,24 @@ import type {
 	McpToolDescriptor,
 } from "./types";
 
+/**
+ * Quote a single command-line token for cmd.exe.
+ *
+ * Only used when spawning with `shell: true` on Windows. Tokens without
+ * whitespace or shell metacharacters are left untouched so that `npx`, `bunx`
+ * and friends still resolve through PATH the way they must; anything else is
+ * wrapped in double quotes, with embedded quotes escaped.
+ */
+export function quoteForCmd(token: string): string {
+	if (token === "") {
+		return '""';
+	}
+	if (!/[\s"^&|<>()]/.test(token)) {
+		return token;
+	}
+	return `"${token.replace(/"/g, '\\"')}"`;
+}
+
 type JsonRpcRequest = {
 	jsonrpc: "2.0";
 	id: number;
@@ -253,14 +271,27 @@ class StdioMcpClient implements McpServerClient {
 		this.stderrBuffer = "";
 		this.protocolMode = protocolMode;
 
-		const platformOptions =
-			process.platform === "win32"
-				? {
-						windowsHide: true,
-						shell: true,
-					}
-				: {};
-		const child = spawn(transport.command, transport.args ?? [], {
+		// Windows needs `shell: true` so that `npx`/`bunx` style commands, which
+		// are .cmd shims rather than real executables, can be launched at all.
+		// But cmd.exe re-splits the command line on spaces, so an unquoted path
+		// under Program Files is truncated at the space and fails with
+		// "'C:\Program' is not recognized". Quote the command and its arguments
+		// ourselves for that path only; on POSIX there is no shell and the argv
+		// array is passed through verbatim.
+		const useShell = process.platform === "win32";
+		const platformOptions = useShell
+			? {
+					windowsHide: true,
+					shell: true,
+				}
+			: {};
+		const command = useShell
+			? quoteForCmd(transport.command)
+			: transport.command;
+		const args = useShell
+			? (transport.args ?? []).map(quoteForCmd)
+			: (transport.args ?? []);
+		const child = spawn(command, args, {
 			cwd: transport.cwd,
 			env: {
 				...process.env,
