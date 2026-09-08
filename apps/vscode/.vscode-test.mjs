@@ -26,5 +26,10 @@ export default defineConfig({
 	workspaceFolder: "test-workspace",
 	version: vscodeTestVersion,
 	extensionDevelopmentPath: path.resolve("./"),
-	launchArgs: ["--disable-extensions"],
+	// No `--disable-extensions`: it also disables the extension under
+	// development, so activate() never runs and none of its commands are
+	// registered — which is why the plus-button test could only ever fail with
+	// "command not found". The test host starts from a clean profile anyway, so
+	// there is nothing else to disable.
+	launchArgs: [],
 })

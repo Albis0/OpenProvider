@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises"
 import { after, describe, it } from "mocha"
 import path from "path"
-import "should"
+import should from "should"
 import * as vscode from "vscode"
 
 const packagePath = path.join(__dirname, "..", "..", "package.json")
@@ -13,10 +13,15 @@ describe("OpenProvider Extension", () => {
 
 	it("should verify extension ID matches package.json", async () => {
 		const packageJSON = JSON.parse(await readFile(packagePath, "utf8"))
-		const id = packageJSON.publisher + "." + packageJSON.name
-		const clineExtensionApi = vscode.extensions.getExtension(id)
+		const id = `${packageJSON.publisher}.${packageJSON.name}`
+		const extension = vscode.extensions.getExtension(id)
 
-		clineExtensionApi?.id.should.equal(id)
+		// Assert the lookup found something before reading off it. With `?.` this
+		// passed even when the extension was not loaded at all, which is how a
+		// disabled test host went unnoticed while the next test failed with
+		// "command not found".
+		should.exist(extension, `extension ${id} is not loaded in the test host`)
+		extension?.id.should.equal(id)
 	})
 
 	it("should successfully execute the plus button command", async () => {
