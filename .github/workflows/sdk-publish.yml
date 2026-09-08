@@ -30,6 +30,9 @@ defaults:
 
 jobs:
   test:
+    # Guarded like publish-sdk below: this workflow is scheduled daily, and
+    # without the check the fork runs upstream's publish pipeline every night.
+    if: github.repository == 'cline/cline'
     permissions:
       contents: read
     uses: ./.github/workflows/sdk-test.yml

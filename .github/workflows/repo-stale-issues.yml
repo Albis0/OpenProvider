@@ -7,6 +7,9 @@ on:
 
 jobs:
     close-issues:
+        # Upstream-only: this runs daily and would otherwise mark and close
+        # issues on every fork of the repo.
+        if: github.repository == 'cline/cline'
         runs-on: ubuntu-latest
         permissions:
             issues: write
