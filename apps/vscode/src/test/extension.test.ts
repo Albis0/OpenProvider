@@ -20,8 +20,15 @@ describe("OpenProvider Extension", () => {
 	})
 
 	it("should successfully execute the plus button command", async () => {
-		await new Promise((resolve) => setTimeout(resolve, 400))
-		await vscode.commands.executeCommand("openprovider.plusButtonClicked")
+		// The extension activates on `onStartupFinished`, so its commands are not
+		// registered the moment the test host is ready. Waiting a fixed 400ms
+		// raced that and failed with "command not found"; await the activation
+		// itself instead.
+		const packageJSON = JSON.parse(await readFile(packagePath, "utf8"))
+		const extension = vscode.extensions.getExtension(packageJSON.publisher + "." + packageJSON.name)
+		await extension?.activate()
+
+		await vscode.commands.executeCommand(`${packageJSON.name}.plusButtonClicked`)
 	})
 
 	// New test to verify xvfb and webview functionality
