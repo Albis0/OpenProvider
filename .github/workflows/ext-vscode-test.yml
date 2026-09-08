@@ -272,7 +272,17 @@ jobs:
 
     test-platform-integration:
         needs: [detect-changes, quality-checks]
-        if: needs.detect-changes.outputs.testing_platform == 'true'
+        # Disabled on this fork: the orchestrator replays recorded gRPC sessions
+        # from `tests/specs/`, and those fixtures have never existed in this
+        # repository -- the run dies on the first spec it cannot find. The one
+        # recorded session upstream ships also asserts a Cline-account device
+        # login ("Enter this code in your browser: ..."), a flow this fork
+        # removed, so the spec could not pass here even with the fixtures.
+        #
+        # Left wired up rather than deleted so it can be re-enabled by restoring
+        # this condition once fork-owned fixtures exist. The aggregate `test`
+        # gate below accepts `skipped`, so nothing downstream breaks.
+        if: false
         runs-on: ubuntu-latest
         defaults:
           run:
@@ -366,7 +376,10 @@ jobs:
                     exit 1
                   fi
 
-                  if [ "$TESTING_PLATFORM_CHANGED" = "true" ] && [ "$TEST_PLATFORM_RESULT" != "success" ]; then
+                  # "skipped" is allowed: test-platform-integration is disabled on
+                  # this fork (see the note on that job), so it never reports
+                  # success even when testing-platform files changed.
+                  if [ "$TESTING_PLATFORM_CHANGED" = "true" ] && [ "$TEST_PLATFORM_RESULT" != "success" ] && [ "$TEST_PLATFORM_RESULT" != "skipped" ]; then
                     echo "test-platform-integration did not succeed: $TEST_PLATFORM_RESULT"
                     exit 1
                   fi
